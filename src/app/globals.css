@@ -1,0 +1,161 @@
+@import "tailwindcss";
+
+/*
+  Kasaa design tokens — derived from kasaa-spec-completa.md §1
+  Two visual surfaces: buyer (light editorial) and agent (dark utility).
+  Both share the single neon-green accent; the agent surface additionally
+  allows amber/red/blue as semantic status colors (never used on the buyer side).
+*/
+@theme {
+  /* Shared accent */
+  --color-accent: #00ff66;
+  --color-accent-tint: #f0fff6;
+  /* Verde pastel — CTA "Solicitar Visita" y estados seleccionados del
+     selector de día/hora (frame real `property-card-booking-states`,
+     versión "Estados de Booking"). Muestreado directo del PNG de
+     referencia (#74fa79 exacto, sampleado en 2 parches sólidos
+     distintos) — visiblemente más claro que `--color-accent` (#00ff66),
+     que sigue siendo el verde neón de badges/bordes/links. No es un
+     error de compresión: el pill ámbar de la misma imagen matcheó su
+     hex real casi exacto, así que la paleta del archivo es confiable. */
+  --color-accent-soft: #74fa79;
+
+  /* Buyer surface (light editorial) */
+  --color-buyer-bg: #fafafa;
+  --color-buyer-surface: #ffffff;
+  --color-buyer-border: #e5e5e5;
+  --color-buyer-text: #1a1a1a;
+  --color-buyer-text-muted: #6b7280;
+  --color-buyer-text-faint: #9ca3af;
+  /* "Light Gray" del palette de Figma — fondo de inputs rellenos (sin
+     borde) en login/registro/editor, en vez de blanco+borde. */
+  --color-buyer-input-bg: #f5f5f5;
+
+  /* Agent surface (dark utility) */
+  --color-agent-sidebar: #0f1210;
+  --color-agent-bg: #fafafa;
+  --color-agent-border: #e5e5e5;
+  /* Fondo del ítem de nav activo en el sidebar de agente — sampleado del
+     frame real `dashboard-home` (#1d2530), no es el mismo negro que
+     `--color-agent-sidebar`. */
+  --color-agent-sidebar-active: #1d2530;
+
+  /* Agent-only semantic status colors — never used on the buyer surface */
+  --color-status-success: #00ff66;
+  /* Agregados para Agenda (frame `agent-agenda-screen`) — el resto de
+     status-success ya existía (reusa el mismo verde neón del accent),
+     pero faltaba un par bg/text para pills tipo "Confirmada" con texto
+     legible sobre fondo pálido, mismo patrón que status-amber-*. */
+  --color-status-success-bg: #e3fdea;
+  --color-status-success-text: #067a3d;
+  --color-status-amber: #f59e0b;
+  --color-status-amber-bg: #fef3c7;
+  --color-status-amber-text: #92400e;
+  --color-status-red: #ef4444;
+  --color-status-red-bg: #fee2e2;
+  --color-status-blue: #3b82f6;
+  --color-status-blue-bg: #dbeafe;
+
+  --font-display: "Fraunces", ui-serif, Georgia, serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  --radius-card: 20px;
+  --radius-control: 12px;
+  --radius-pill: 9999px;
+}
+
+body {
+  background: var(--color-buyer-bg);
+  color: var(--color-buyer-text);
+  font-family: var(--font-sans);
+}
+
+/* Mosaico de fondo del Landing Gateway (spec §3.1) — shimmer sutil que
+   insinúa movimiento hasta que las celdas sean <video> reales. */
+@keyframes mosaic-shimmer {
+  0%,
+  100% {
+    opacity: 0.75;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.04);
+  }
+}
+
+.mosaic-cell {
+  animation: mosaic-shimmer 6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mosaic-cell {
+    animation: none;
+  }
+}
+
+/* Slider de doble punta (Precio/Superficie del panel de Filtros
+   avanzados) — dos <input type="range"> apilados; el truco es dejar el
+   track transparente/sin eventos de puntero y que solo el thumb capture
+   clicks, así cada input se puede arrastrar de forma independiente. */
+.dual-range {
+  position: relative;
+  height: 20px;
+}
+.dual-range input[type="range"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  margin: 0;
+  appearance: none;
+  background: transparent;
+  pointer-events: none;
+}
+.dual-range input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  background: transparent;
+}
+.dual-range input[type="range"]::-moz-range-track {
+  height: 4px;
+  background: transparent;
+}
+.dual-range input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  pointer-events: auto;
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border-radius: 9999px;
+  background: var(--color-accent);
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px var(--color-buyer-border);
+  cursor: pointer;
+}
+.dual-range input[type="range"]::-moz-range-thumb {
+  pointer-events: auto;
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  background: var(--color-accent);
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px var(--color-buyer-border);
+  cursor: pointer;
+}
+.dual-range .dual-range-track {
+  position: absolute;
+  top: 8px;
+  left: 0;
+  right: 0;
+  height: 4px;
+  border-radius: 9999px;
+  background: var(--color-buyer-border);
+  pointer-events: none;
+}
+.dual-range .dual-range-fill {
+  position: absolute;
+  top: 8px;
+  height: 4px;
+  border-radius: 9999px;
+  background: var(--color-accent);
+  pointer-events: none;
+}

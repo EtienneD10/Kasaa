@@ -113,6 +113,8 @@ export interface PropertyAmenities {
   cercaDeMetro: boolean;
 }
 
+export type DroneStyle = "kasaa" | "orbita" | "ascenso" | "panoramica";
+
 export interface Property {
   id: string;
   code: string; // ej. "PG-0234" — spec §5.6
@@ -134,7 +136,17 @@ export interface Property {
   financing: PropertyFinancing;
   amenities: PropertyAmenities;
   photos: string[];
+  /** Video vertical corto "representativo" de la propiedad (el que está de
+   * moda para mostrar una propiedad). Si existe, la tarjeta lo reproduce
+   * mudo y en loop en vez de la foto. */
   videoUrl?: string;
+  /** Estilo del recorrido tipo dron simulado con las fotos (ver
+   * `lib/property-media.tsx`). Sin valor = el predeterminado de Kasaa. Solo
+   * se usa cuando la propiedad no tiene `videoUrl`. */
+  droneStyle?: DroneStyle;
+  /** Enlace al recorrido 3D tipo Matterport (https). Lo carga el agente;
+   * sin enlace, "Ver en 3D" muestra el estado "no disponible aún". */
+  tourUrl?: string;
   status: PropertyStatus;
   agent: Agent;
   favoriteCount: number;

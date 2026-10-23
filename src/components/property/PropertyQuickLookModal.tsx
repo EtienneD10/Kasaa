@@ -22,6 +22,9 @@ import {
 } from "lucide-react";
 import { cn, formatPrice, timeAgo } from "@/lib/utils";
 import { relatedProperties } from "@/lib/mock-data";
+import { PropertyMedia } from "@/components/property/PropertyMedia";
+import { Tour3DViewer } from "@/components/property/Tour3DViewer";
+import { usePropertyMedia } from "@/lib/property-media";
 import type { Property } from "@/types";
 
 /**
@@ -32,8 +35,8 @@ import type { Property } from "@/types";
  * referencia con flecha (los otros dos íconos de esa pila, mute y resumen
  * IA, siguen sin acción todavía).
  *
- * Contenido: hero de fotos (sin video real todavía, ver TRACKING.md
- * decisión abierta #3 — el toggle "Vídeo" queda deshabilitado),
+ * Contenido: hero con toggle Vídeo/Fotos (Vídeo = video representativo
+ * o recorrido dron simulado vía `PropertyMedia`; Fotos = galería manual),
  * características (mapea 1:1 con `PropertyCharacteristics`), financiación
  * (mapea con `PropertyFinancing`), carrusel "También te puede interesar"
  * (clickear un mini-card navega DENTRO del modal sin cerrarlo) y un
@@ -79,6 +82,11 @@ export function PropertyQuickLookModal({
   // — no hace falta un efecto que lo reasigne en cada mount.
   const [property, setProperty] = useState(initialProperty);
   const [photoIndex, setPhotoIndex] = useState(0);
+  // Hero: "Vídeo" = video representativo o recorrido dron simulado
+  // (PropertyMedia); "Fotos" = galería manual con flechas.
+  const [heroMode, setHeroMode] = useState<"video" | "fotos">("video");
+  const [show3D, setShow3D] = useState(false);
+  const { tourUrl } = usePropertyMedia(property);
 
   function selectRelated(next: Property) {
     setProperty(next);
@@ -122,34 +130,54 @@ export function PropertyQuickLookModal({
 
         {/* Hero — fotos (sin video real todavía) */}
         <div className="relative aspect-[16/10] w-full bg-buyer-text">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={property.photos[photoIndex]}
-            alt={property.title}
-            className="h-full w-full object-cover"
-          />
+          <div className="absolute inset-0 overflow-hidden">
+            {heroMode === "video" ? (
+              <PropertyMedia property={property} />
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={property.photos[photoIndex]}
+                alt={property.title}
+                className="h-full w-full object-cover"
+              />
+            )}
+          </div>
           <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
 
           <div className="absolute left-3 top-3 flex gap-1.5">
             <span className="flex items-center gap-1 rounded-full bg-white/95 px-2.5 py-1 text-[10px] font-bold text-buyer-text">
               <span className="h-1.5 w-1.5 rounded-full bg-accent" /> {statusLabel}
             </span>
-            <span className="flex items-center gap-1 rounded-full bg-black/55 px-2.5 py-1 text-[10px] font-semibold text-white backdrop-blur-sm">
+            <button
+              onClick={() => setShow3D(true)}
+              className="flex items-center gap-1 rounded-full bg-black/55 px-2.5 py-1 text-[10px] font-semibold text-white backdrop-blur-sm hover:bg-black/70"
+            >
               <Box size={10} /> 3D Tour
-            </span>
+            </button>
           </div>
 
           <div className="absolute right-12 top-3 flex overflow-hidden rounded-full bg-black/45 text-[10px] font-semibold text-white backdrop-blur-sm">
             <button
-              title="Próximamente: video real"
-              className="flex items-center gap-1 px-2.5 py-1 text-white/50"
+              onClick={() => setHeroMode("video")}
+              className={cn(
+                "flex items-center gap-1 rounded-full px-2.5 py-1",
+                heroMode === "video" ? "bg-white text-buyer-text" : "text-white/80"
+              )}
             >
               <Play size={10} /> Vídeo
             </button>
-            <span className="rounded-full bg-white px-2.5 py-1 text-buyer-text">Fotos</span>
+            <button
+              onClick={() => setHeroMode("fotos")}
+              className={cn(
+                "rounded-full px-2.5 py-1",
+                heroMode === "fotos" ? "bg-white text-buyer-text" : "text-white/80"
+              )}
+            >
+              Fotos
+            </button>
           </div>
 
-          {property.photos.length > 1 && (
+          {heroMode === "fotos" && property.photos.length > 1 && (
             <>
               <button
                 onClick={() =>
@@ -378,6 +406,9 @@ export function PropertyQuickLookModal({
           </div>
         </div>
       </div>
+      {show3D && (
+        <Tour3DViewer title={property.title} tourUrl={tourUrl} onClose={() => setShow3D(false)} />
+      )}
     </div>
   );
 }

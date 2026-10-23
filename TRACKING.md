@@ -401,6 +401,76 @@ silencio:
     documentada) confirmando el layout contra 3 tarjetas distintas
     (precio más caro, más barato, y uno intermedio).
 
+- **Medios de la propiedad: video representativo, recorrido dron y visor 3D**
+  (pedido del usuario sobre el frame "Property Card — Estados de Booking"):
+  - **Modelo**: `Property` ahora tiene `videoUrl` (ya existía, sin uso),
+    `droneStyle?: DroneStyle` y `tourUrl?`. Se resuelven vía
+    `lib/property-media.tsx` (`usePropertyMedia`), que combina el mock con
+    lo que cargó el agente.
+  - **Video en loop en la tarjeta** (`PropertyMedia.tsx`): si hay
+    `videoUrl`, el fondo de la tarjeta (los 3 estados + hero del Quick
+    Look) es un `<video>` mudo, en loop, `playsInline`, que sólo
+    reproduce mientras está visible (IntersectionObserver, para no
+    correr 24 videos a la vez en Discovery). Si el archivo falla, cae
+    solo al recorrido dron. Probado con un `.webm` real subido desde el
+    panel; **ojo**: el Chromium de este sandbox no decodifica H.264/mp4
+    (un `.mp4` de prueba cayó al respaldo dron) — es una limitación del
+    navegador de prueba, no del código; en un navegador normal el mp4
+    reproduce.
+  - **Estilo dron SIMULADO con fotos** (`DroneReel`): no es video
+    generado. Anima las fotos con zoom/traslación (keyframes
+    `drone-*` en `globals.css`) y encadena con fundido si hay varias
+    (con una sola, ida y vuelta). 4 estilos: **Dron Kasaa**
+    (predeterminado — todas las propiedades sin video lo usan), Órbita,
+    Ascenso, Panorámica. Respeta `prefers-reduced-motion`. Generar un
+    video real con IA queda para cuando haya servicio/backend.
+  - **Visor 3D tipo Matterport** (`Tour3DViewer.tsx`): "Ver en 3D" (los 2
+    estados de la tarjeta) y el badge "3D Tour" del Quick Look abren un
+    visor a pantalla completa que incrusta `tourUrl` en un `<iframe>`.
+    Sólo acepta https. Sin enlace muestra "Recorrido 3D no disponible
+    aún" — Kasaa NO genera el 3D: hace falta un escaneo real
+    (Matterport u otro). **No se cargó ningún `tourUrl` en el mock**
+    (no tengo forma de verificar desde acá que un ID de Matterport
+    cargue), así que hoy todas las tarjetas muestran ese estado vacío
+    hasta que un agente pegue un enlace. El iframe se probó con un
+    enlace de prueba (se inserta bien; el contenido de terceros no
+    carga en este sandbox por la restricción de red).
+  - **Carga desde el panel del agente** (`PropertyMediaModal.tsx`): el
+    lápiz de cada fila de Propiedades abre un editor con 3 secciones —
+    video (elegir archivo o pegar https, con vista previa), estilo dron
+    (4 tarjetas con vista previa animada, la predeterminada marcada) y
+    enlace 3D (validación https + botón "Probar" que abre el visor).
+    "Guardar" escribe en `PropertyMediaProvider` (contexto en memoria,
+    montado en el layout raíz) → se ve en la tarjeta del comprador al
+    navegar con links internos; **recargar la página lo pierde** (no hay
+    backend). Un video elegido desde el equipo queda como `blob:` URL de
+    la sesión — subirlo a un storage real es trabajo de backend.
+  - **Agente más visible en la tarjeta** (pedido: "el ícono de agente
+    con nombre y agencia, que se note"): antes sólo había un avatar de
+    24px suelto junto al precio. Ahora el estado Default tiene una fila
+    propia sobre fondo oscuro traslúcido con avatar de 36px (indicador
+    en línea), nombre en negrita y "Asesor/a <agencia>". **Desvío
+    consciente**: va en una fila debajo del precio, no al costado,
+    porque en el ancho de la grilla de 3 columnas no entran precio +
+    nombre + agencia + vistas en una línea; el contador de vistas quedó
+    a la derecha del precio. En el footer de Scheduling el avatar pasó
+    de 32 a 44px y nombre/agencia a un tamaño mayor. Si se prefiere el
+    avatar pegado a la derecha del precio (como en el frame), es un
+    cambio chico pero hay que decidir qué pasa con el texto.
+  - **Pendientes/decisiones abiertas**: (a) el badge "3D Tour" se sigue
+    mostrando en TODAS las tarjetas (como en el Figma) aunque la
+    propiedad no tenga `tourUrl` — queda la pregunta de si debería
+    aparecer sólo cuando hay recorrido; (b) `PropertyType` no tiene
+    "terreno" (hoy sería `otro`/`finca_rustica`) — el visor 3D no
+    depende del tipo, pero el modelo no distingue terrenos; (c) video
+    y 3D reales necesitan storage/backend; (d) "Nueva Propiedad" sigue
+    decorativo — este modal es lo único del editor de propiedad que
+    existe.
+  - Verificado: `npm run build` + `npx eslint .` limpios y Playwright
+    end-to-end (comprador sin 3D → estado vacío; agente sube webm, elige
+    Órbita, pega https, rechaza http; Discovery muestra el video
+    reproduciéndose y "Ver en 3D" abre el iframe con la URL cargada).
+
 - **`DayTimeSelector` — ventana fija de 4 días desde hoy**: antes la
   fila de días se armaba directo de `Set(slots.map(s => s.date))`, es
   decir, de los offsets sueltos de `availabilityDays` de cada propiedad
@@ -815,6 +885,7 @@ elegir proveedor de auth real (decisión abierta #2) esto se resuelve solo.
 - [x] Tu equipo (`EquipoTeam.tsx`, `/agente/equipo`) — tabla de miembros + panel de permisos/detalle con selección real; ver sección "Rediseño 2026-08" para las inconsistencias cross-frame encontradas
 - [x] `agente/(panel)/layout.tsx` — gate por rol + `AgentSidebar` compartidos entre Dashboard/Pipeline/Equipo (antes vivía duplicado en cada `page.tsx`)
 - [x] Propiedades (`PropertiesTable.tsx`, `/agente/propiedades`) — tabla con selección múltiple, búsqueda y paginación reales; regla de 20 días derivada (`lib/property-status.ts::getListingStatus()`) + modal "¿Sigue disponible?" (`ConfirmListingModal.tsx`), integrado con el link "Confirmar vigencia" de Atención Requerida del Dashboard Home (`?confirmar=<id>`); ver sección "Rediseño 2026-08" para el detalle completo, incluyendo el cambio retroactivo intencional al badge de p25 en el Dashboard
+- [x] Medios de propiedad (`PropertyMedia.tsx`, `Tour3DViewer.tsx`, `PropertyMediaModal.tsx`, `lib/property-media.tsx`) — video en loop, recorrido dron simulado con fotos y visor 3D por enlace; ver sección "Rediseño 2026-08" para lo que es real y lo que falta (storage/backend)
 - [x] Agenda (`AgentAgenda.tsx`, `/agente/agenda`) — calendario semanal real (visitas ubicadas por fecha/hora real, filtros de propiedad/estado reales, confirmar/cancelar visita real) + detección real de conflictos de horario y el wizard de 3 pasos "Flujo de Resolución de Conflictos" (`ConflictResolutionModal.tsx`) + "Bloquear horario" (`BlockScheduleModal.tsx`); ver sección "Rediseño 2026-08" para el detalle completo de decisiones y desvíos. Vista "Mes" queda decorativa (sólo se construyó Semana)
 
 ### 🔲 App compradora — pendiente

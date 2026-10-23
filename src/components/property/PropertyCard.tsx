@@ -5,7 +5,6 @@ import {
   Clock,
   Eye,
   Grid3x3,
-  Images,
   MapPinned,
   Plus,
   Box,
@@ -17,6 +16,9 @@ import { cn, formatPrice, timeAgo } from "@/lib/utils";
 import type { Property, AvailabilitySlot } from "@/types";
 import { DayTimeSelector } from "@/components/booking/DayTimeSelector";
 import { PropertyQuickLookModal } from "@/components/property/PropertyQuickLookModal";
+import { PropertyMedia } from "@/components/property/PropertyMedia";
+import { Tour3DViewer } from "@/components/property/Tour3DViewer";
+import { usePropertyMedia } from "@/lib/property-media";
 
 /**
  * Componente maestro del sistema — reconstruido a partir del archivo real
@@ -51,6 +53,14 @@ import { PropertyQuickLookModal } from "@/components/property/PropertyQuickLookM
  * - "Ver más" (junto a "Agenda tu visita inmersiva") ahora abre el Quick
  *   Look de verdad — antes quedaba decorativo porque ese modal no
  *   existía todavía cuando se escribió esa línea.
+ *
+ * MEDIOS (pedido posterior): el fondo de la tarjeta ya no es una `<img>`
+ * fija sino `PropertyMedia` — video en loop si la propiedad tiene
+ * `videoUrl`, o recorrido tipo dron simulado con las fotos (estilo
+ * predeterminado "Dron Kasaa"). "Ver en 3D" abre `Tour3DViewer` con el
+ * `tourUrl` que cargó el agente. El estado Default muestra al agente
+ * (avatar + nombre + agencia) en una fila propia. Detalle y límites en
+ * TRACKING.md, "Medios de la propiedad".
  *
  * CORRECCIÓN (referencia "tarjeta principal", buena resolución 1051×617,
  * un solo card recortado con anotación del usuario) — el estado Default
@@ -139,6 +149,8 @@ export function PropertyCard({
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [showQuickLook, setShowQuickLook] = useState(false);
+  const [show3D, setShow3D] = useState(false);
+  const { tourUrl } = usePropertyMedia(property);
 
   const statusLabel = property.operation === "venta" ? "VENTA" : "ALQUILER";
   const canConfirm = !!(selectedDate && selectedTime);
@@ -171,18 +183,7 @@ export function PropertyCard({
           className="relative flex w-full flex-col overflow-hidden rounded-card bg-buyer-text"
           style={{ minHeight: 520 }}
         >
-          {property.photos[0] ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={property.photos[0]}
-              alt={property.title}
-              className="absolute inset-0 h-full w-full object-cover"
-            />
-          ) : (
-            <div className="absolute inset-0 flex items-center justify-center text-white/40">
-              <Images size={20} className="mr-1" /> Sin fotos
-            </div>
-          )}
+          <PropertyMedia property={property} />
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-black/25" />
 
           {/* Badges superiores — los 3 comparten el mismo fondo oscuro
@@ -260,21 +261,31 @@ export function PropertyCard({
               {property.characteristics.superficieCubierta} m²
             </p>
             <div className="flex items-center justify-between gap-2 pt-1">
-              {/* text-xl (no text-2xl) — con el tamaño más grande, precios
-                  largos en venta (ej. "US$2.980.000") no entraban junto al
-                  avatar+vistas en el ancho angosto de la grilla de 3
-                  columnas de Discovery y se truncaban con "…"; a este
-                  tamaño entran completos en la gran mayoría de los casos
-                  (se deja `truncate` como resguardo para el caso extremo). */}
               <p className="min-w-0 truncate text-xl font-bold">
                 {formatPrice(property.price, property.currency)}
               </p>
-              <div className="flex shrink-0 items-center gap-1.5">
-                {/* La referencia muestra el avatar del agente sin borde ni
-                    indicador de estado (a diferencia de la fila de agente
-                    del estado Scheduling, que sí los tiene y no cambió) —
-                    corregido acá para que coincida. */}
-                <div className="h-6 w-6 shrink-0 overflow-hidden rounded-full bg-buyer-border">
+              {/* Antes era el toggle de favorito (corazón). La referencia
+                  muestra un círculo simple + número, sin acción — se
+                  reinterpretó como vistas, mismo criterio ya usado en
+                  InterstitialCard.tsx (favoriteCount*3.4, placeholder
+                  documentado ahí por no haber campo propio en el modelo
+                  todavía). Es de solo lectura. */}
+              <span className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-black/35 px-2.5 py-1 text-xs font-medium text-white/90 backdrop-blur-sm">
+                <Eye size={14} /> {Math.round(property.favoriteCount * 3.4).toLocaleString("es-AR")}
+              </span>
+            </div>
+            {/* Agente — pedido del usuario: "el ícono de agente con el
+                nombre y la agencia, que se note". Antes sólo había un
+                avatar de 24px suelto junto al precio, sin texto. Ahora
+                es una fila propia (avatar 36px con indicador en línea +
+                nombre en negrita + agencia) sobre un fondo oscuro
+                traslúcido para que se lea sobre cualquier foto/video. Va
+                en fila aparte, no al costado del precio, porque en el
+                ancho angosto de la grilla de 3 columnas no entran
+                precio + nombre + agencia + vistas en una sola línea. */}
+            <div className="flex items-center gap-2.5 rounded-xl bg-black/40 p-2 backdrop-blur-sm">
+              <div className="relative h-9 w-9 shrink-0 rounded-full border-2 border-white/70 bg-buyer-border">
+                <div className="h-full w-full overflow-hidden rounded-full">
                   {property.agent.avatarUrl && (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -284,19 +295,18 @@ export function PropertyCard({
                     />
                   )}
                 </div>
-                {/* Antes era el toggle de favorito (corazón). La
-                    referencia muestra un círculo simple + número, sin
-                    acción — se reinterpretó como vistas, mismo criterio
-                    ya usado en InterstitialCard.tsx (favoriteCount*3.4,
-                    placeholder documentado ahí por no haber campo propio
-                    en el modelo todavía). Es de solo lectura. */}
-                <span className="flex items-center gap-1 whitespace-nowrap text-xs font-medium text-white/90">
-                  <Eye size={14} /> {Math.round(property.favoriteCount * 3.4).toLocaleString("es-AR")}
-                </span>
+                <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-black/60 bg-accent" />
+              </div>
+              <div className="min-w-0 leading-tight">
+                <p className="truncate text-sm font-semibold text-white">{property.agent.name}</p>
+                <p className="truncate text-xs text-white/75">Asesor/a {property.agent.agency}</p>
               </div>
             </div>
             <div className="flex gap-2 pt-1">
-              <button className="flex flex-1 items-center justify-center rounded-xl border border-white/30 bg-white py-3 text-xs font-bold text-buyer-text">
+              <button
+                onClick={() => setShow3D(true)}
+                className="flex flex-1 items-center justify-center rounded-xl border border-white/30 bg-white py-3 text-xs font-bold text-buyer-text"
+              >
                 Ver en 3D
               </button>
               <button
@@ -313,18 +323,7 @@ export function PropertyCard({
           {/* Media zone — foto full-bleed, sólo badges superiores (estados
               Scheduling/Sent, layout sin cambios de esta corrección). */}
           <div className="relative aspect-[327/400] w-full overflow-hidden bg-buyer-text">
-            {property.photos[0] ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={property.photos[0]}
-                alt={property.title}
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center text-white/40">
-                <Images size={20} className="mr-1" /> Sin fotos
-              </div>
-            )}
+            <PropertyMedia property={property} />
             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-black/25" />
 
             <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
@@ -367,26 +366,35 @@ export function PropertyCard({
                 onSelectTime={setSelectedTime}
               />
 
-              <div className="flex items-center gap-2.5 border-t border-buyer-border pt-3">
-                <div className="relative h-8 w-8 overflow-hidden rounded-full bg-buyer-border">
-                  {property.agent.avatarUrl && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={property.agent.avatarUrl}
-                      alt={property.agent.name}
-                      className="h-full w-full object-cover"
-                    />
-                  )}
-                  <span className="absolute bottom-0 right-0 h-2 w-2 rounded-full border border-white bg-accent" />
+              <div className="flex items-center gap-3 border-t border-buyer-border pt-3">
+                <div className="relative h-11 w-11 shrink-0 rounded-full bg-buyer-border">
+                  <div className="h-full w-full overflow-hidden rounded-full">
+                    {property.agent.avatarUrl && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={property.agent.avatarUrl}
+                        alt={property.agent.name}
+                        className="h-full w-full object-cover"
+                      />
+                    )}
+                  </div>
+                  <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white bg-accent" />
                 </div>
-                <div>
-                  <p className="text-sm font-semibold text-buyer-text">{property.agent.name}</p>
-                  <p className="text-xs text-buyer-text-muted">Asesor/a {property.agent.agency}</p>
+                <div className="min-w-0">
+                  <p className="truncate text-base font-semibold text-buyer-text">
+                    {property.agent.name}
+                  </p>
+                  <p className="truncate text-sm text-buyer-text-muted">
+                    Asesor/a {property.agent.agency}
+                  </p>
                 </div>
               </div>
 
               <div className="flex gap-2">
-                <button className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-buyer-border bg-white py-3 text-xs font-bold text-buyer-text">
+                <button
+                  onClick={() => setShow3D(true)}
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-buyer-border bg-white py-3 text-xs font-bold text-buyer-text"
+                >
                   <Box size={13} /> Ver en 3D
                 </button>
                 <button
@@ -437,6 +445,14 @@ export function PropertyCard({
             Cancelar
           </button>
         </div>
+      )}
+
+      {show3D && (
+        <Tour3DViewer
+          title={property.title}
+          tourUrl={tourUrl}
+          onClose={() => setShow3D(false)}
+        />
       )}
 
       {showQuickLook && (

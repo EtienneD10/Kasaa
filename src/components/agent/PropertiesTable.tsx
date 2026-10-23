@@ -17,6 +17,7 @@ import { useAuth } from "@/lib/auth-context";
 import { mockProperties, mockPropertyPerformance } from "@/lib/mock-data";
 import { getListingStatus, daysSince } from "@/lib/property-status";
 import { ConfirmListingModal } from "./ConfirmListingModal";
+import { PropertyMediaModal } from "./PropertyMediaModal";
 import type { Property, PropertyStatus } from "@/types";
 
 /**
@@ -110,6 +111,8 @@ export function PropertiesTable() {
   const [modalPropertyId, setModalPropertyId] = useState<string | null>(() =>
     searchParams.get("confirmar")
   );
+  // Editor de medios (video / estilo dron / enlace 3D) — ver PropertyMediaModal.
+  const [mediaPropertyId, setMediaPropertyId] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -123,6 +126,7 @@ export function PropertiesTable() {
   const pageProperties = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const modalProperty = properties.find((p) => p.id === modalPropertyId) ?? null;
+  const mediaProperty = properties.find((p) => p.id === mediaPropertyId) ?? null;
 
   function toggleSelected(id: string) {
     setSelected((prev) => {
@@ -339,7 +343,9 @@ export function PropertiesTable() {
                       <div className="flex items-center gap-1">
                         <button
                           type="button"
-                          title="Próximamente: Editor de propiedad"
+                          title="Editar medios: video, estilo dron y recorrido 3D"
+                          aria-label="Editar medios"
+                          onClick={() => setMediaPropertyId(p.id)}
                           className="flex h-7 w-7 items-center justify-center rounded-full text-buyer-text-muted hover:bg-buyer-bg"
                         >
                           <Pencil size={13} />
@@ -441,6 +447,14 @@ export function PropertiesTable() {
             <X size={14} />
           </button>
         </div>
+      )}
+
+      {mediaProperty && (
+        <PropertyMediaModal
+          key={mediaProperty.id}
+          property={mediaProperty}
+          onClose={() => setMediaPropertyId(null)}
+        />
       )}
 
       {modalProperty && (

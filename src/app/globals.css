@@ -159,3 +159,32 @@ body {
   background: var(--color-accent);
   pointer-events: none;
 }
+
+/*
+  Recorrido "tipo dron" simulado: cada estilo es un movimiento de cámara
+  (zoom + traslación) aplicado a la foto, de ~6s, que reinicia cada vez que
+  `DroneReel` cambia de foto. No es video real — ver `lib/property-media.tsx`.
+*/
+@keyframes drone-kasaa {
+  from { transform: scale(1.02) translate3d(0, 1.5%, 0); }
+  to   { transform: scale(1.22) translate3d(-2%, -2.5%, 0); }
+}
+@keyframes drone-orbita {
+  from { transform: scale(1.2) translate3d(4%, 0, 0); }
+  to   { transform: scale(1.2) translate3d(-4%, 0, 0); }
+}
+@keyframes drone-ascenso {
+  from { transform: scale(1.18) translate3d(0, 6%, 0); }
+  to   { transform: scale(1.1) translate3d(0, -6%, 0); }
+}
+@keyframes drone-panoramica {
+  from { transform: scale(1.3) translate3d(6%, 0, 0); }
+  to   { transform: scale(1.3) translate3d(-6%, 0, 0); }
+}
+.drone-kasaa { animation: drone-kasaa 7s ease-in-out both; }
+.drone-orbita { animation: drone-orbita 7s ease-in-out both; }
+.drone-ascenso { animation: drone-ascenso 7s ease-in-out both; }
+.drone-panoramica { animation: drone-panoramica 7s ease-in-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .drone-kasaa, .drone-orbita, .drone-ascenso, .drone-panoramica { animation: none; }
+}

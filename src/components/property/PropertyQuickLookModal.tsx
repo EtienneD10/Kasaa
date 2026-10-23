@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   X,
   Box,
@@ -111,7 +112,8 @@ export function PropertyQuickLookModal({
   const nextSlot = property.availability[0];
   const related = relatedProperties(property);
 
-  return (
+  // Portal a <body> (ver Tour3DViewer): la tarjeta de origen es `isolate`.
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 px-4 py-8"
       onClick={onClose}
@@ -409,7 +411,8 @@ export function PropertyQuickLookModal({
       {show3D && (
         <Tour3DViewer title={property.title} tourUrl={tourUrl} onClose={() => setShow3D(false)} />
       )}
-    </div>
+    </div>,
+    document.body
   );
 }
 

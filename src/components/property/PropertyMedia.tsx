@@ -25,6 +25,32 @@ import type { DroneStyle, Property } from "@/types";
  * `overflow-hidden`.
  */
 
+/**
+ * ¿Está el elemento (casi) en pantalla? Se usa para que SOLO las tarjetas
+ * visibles gasten CPU/GPU: antes cada tarjeta de Discovery animaba su
+ * recorrido dron y rotaba fotos con `setInterval` todo el tiempo, aunque
+ * estuviera 3 pantallas más abajo (24 animaciones permanentes) — eso era
+ * lo que volvía lenta la página.
+ */
+function useInView<T extends Element>(rootMargin = "150px") {
+  const ref = useRef<T>(null);
+  const [inView, setInView] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (typeof IntersectionObserver === "undefined") {
+      // Sin IntersectionObserver (entorno raro): se considera visible.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setInView(true);
+      return;
+    }
+    const io = new IntersectionObserver(([e]) => setInView(e.isIntersecting), { rootMargin });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [rootMargin]);
+  return [ref, inView] as const;
+}
+
 function LoopVideo({
   src,
   poster,
@@ -79,19 +105,22 @@ export function DroneReel({
   photos,
   style,
   alt,
+  active: inView = true,
 }: {
   photos: string[];
   style: DroneStyle;
   alt: string;
+  /** Fuera de pantalla: sin movimiento ni rotación de fotos (ver `useInView`). */
+  active?: boolean;
 }) {
-  const reel = photos.slice(0, MAX_REEL_PHOTOS);
+  const reel = photos.slice(0, inView ? MAX_REEL_PHOTOS : 1);
   const [active, setActive] = useState(0);
 
   useEffect(() => {
-    if (reel.length < 2) return;
+    if (!inView || reel.length < 2) return;
     const id = setInterval(() => setActive((i) => (i + 1) % reel.length), PHOTO_DWELL_MS);
     return () => clearInterval(id);
-  }, [reel.length]);
+  }, [reel.length, inView]);
 
   const single = reel.length === 1;
 
@@ -109,13 +138,17 @@ export function DroneReel({
             className={cn(
               "absolute inset-0 h-full w-full object-cover transition-opacity duration-1000",
               isActive ? "opacity-100" : "opacity-0",
-              isActive && DRONE_CLASS[style]
+              isActive && inView && DRONE_CLASS[style]
             )}
             style={
               single
                 ? { animationIterationCount: "infinite", animationDirection: "alternate" }
                 : undefined
             }
+            // Solo la foto activa se baja de entrada; las demás del recorrido
+            // se piden recién cuando la tarjeta se ve.
+            loading={i === 0 ? "lazy" : inView ? "lazy" : undefined}
+            decoding="async"
           />
         );
       })}
@@ -126,24 +159,32 @@ export function DroneReel({
 export function PropertyMedia({ property }: { property: Property }) {
   const { videoUrl, droneStyle } = usePropertyMedia(property);
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const [ref, inView] = useInView<HTMLDivElement>();
 
+  let content;
   if (videoUrl && failedSrc !== videoUrl) {
-    return (
+    content = (
       <LoopVideo
         src={videoUrl}
         poster={property.photos[0]}
         onFail={() => setFailedSrc(videoUrl)}
       />
     );
-  }
-
-  if (property.photos.length > 0) {
-    return <DroneReel photos={property.photos} style={droneStyle} alt={property.title} />;
+  } else if (property.photos.length > 0) {
+    content = (
+      <DroneReel photos={property.photos} style={droneStyle} alt={property.title} active={inView} />
+    );
+  } else {
+    content = (
+      <div className="absolute inset-0 flex items-center justify-center text-white/40">
+        <Images size={20} className="mr-1" /> Sin fotos
+      </div>
+    );
   }
 
   return (
-    <div className="absolute inset-0 flex items-center justify-center text-white/40">
-      <Images size={20} className="mr-1" /> Sin fotos
+    <div ref={ref} className="absolute inset-0">
+      {content}
     </div>
   );
 }

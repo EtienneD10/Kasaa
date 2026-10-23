@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import {
   Clock,
   Eye,
@@ -139,7 +139,7 @@ interface PropertyCardProps {
   className?: string;
 }
 
-export function PropertyCard({
+function PropertyCardInner({
   property,
   onRequestVisit,
   onCancelVisit,
@@ -227,14 +227,14 @@ export function PropertyCard({
               reloj (antes sólo texto). */}
           <div className="relative z-10 flex items-start justify-between gap-1.5 p-3">
             <div className="flex flex-wrap gap-1.5">
-              <span className="flex items-center gap-1 rounded-full bg-black/45 px-2.5 py-1 text-[10px] font-bold text-accent backdrop-blur-sm">
+              <span className="flex items-center gap-1 rounded-full bg-black/55 px-2.5 py-1 text-[10px] font-bold text-accent">
                 <span className="h-1.5 w-1.5 rounded-full bg-accent" /> {statusLabel}
               </span>
-              <span className="flex items-center gap-1 rounded-full bg-black/45 px-2.5 py-1 text-[10px] font-semibold text-white backdrop-blur-sm">
+              <span className="flex items-center gap-1 rounded-full bg-black/55 px-2.5 py-1 text-[10px] font-semibold text-white">
                 <Box size={10} /> 3D Tour
               </span>
             </div>
-            <span className="flex shrink-0 items-center gap-1 rounded-full bg-black/45 px-2.5 py-1 text-[10px] font-medium text-white backdrop-blur-sm">
+            <span className="flex shrink-0 items-center gap-1 rounded-full bg-black/55 px-2.5 py-1 text-[10px] font-medium text-white">
               <Clock size={10} /> {timeAgo(property.createdAt)}
             </span>
           </div>
@@ -305,7 +305,7 @@ export function PropertyCard({
                   InterstitialCard.tsx (favoriteCount*3.4, placeholder
                   documentado ahí por no haber campo propio en el modelo
                   todavía). Es de solo lectura. */}
-              <span className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-black/35 px-2.5 py-1 text-xs font-medium text-white/90 backdrop-blur-sm">
+              <span className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-black/50 px-2.5 py-1 text-xs font-medium text-white/90">
                 <Eye size={14} /> {Math.round(property.favoriteCount * 3.4).toLocaleString("es-AR")}
               </span>
             </div>
@@ -318,7 +318,7 @@ export function PropertyCard({
                 en fila aparte, no al costado del precio, porque en el
                 ancho angosto de la grilla de 3 columnas no entran
                 precio + nombre + agencia + vistas en una sola línea. */}
-            <div className="flex items-center gap-2.5 rounded-xl bg-black/40 p-2 backdrop-blur-sm">
+            <div className="flex items-center gap-2.5 rounded-xl bg-black/50 p-2">
               <div className="relative h-9 w-9 shrink-0 rounded-full border-2 border-white/70 bg-buyer-border">
                 <div className="h-full w-full overflow-hidden rounded-full">
                   {property.agent.avatarUrl && (
@@ -380,14 +380,14 @@ export function PropertyCard({
             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-black/25" />
 
             <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
-              <span className="flex items-center gap-1 rounded-full bg-black/45 px-2.5 py-1 text-[10px] font-bold text-accent backdrop-blur-sm">
+              <span className="flex items-center gap-1 rounded-full bg-black/55 px-2.5 py-1 text-[10px] font-bold text-accent">
                 <span className="h-1.5 w-1.5 rounded-full bg-accent" /> {statusLabel}
               </span>
-              <span className="flex items-center gap-1 rounded-full bg-black/55 px-2.5 py-1 text-[10px] font-semibold text-white backdrop-blur-sm">
+              <span className="flex items-center gap-1 rounded-full bg-black/55 px-2.5 py-1 text-[10px] font-semibold text-white">
                 <Box size={10} /> 3D Tour
               </span>
             </div>
-            <span className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-black/55 px-2.5 py-1 text-[10px] font-medium text-white backdrop-blur-sm">
+            <span className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-black/55 px-2.5 py-1 text-[10px] font-medium text-white">
               <Clock size={10} /> {timeAgo(property.createdAt)}
             </span>
           </div>
@@ -534,3 +534,10 @@ export function PropertyCard({
     </div>
   );
 }
+
+/**
+ * `memo`: Discovery re-renderiza todo el grid con cada tecla en el buscador o
+ * al marcar un favorito; con handlers estables (useCallback en el padre) las
+ * tarjetas cuyo `property`/`isFavorite` no cambió ya no se vuelven a renderizar.
+ */
+export const PropertyCard = memo(PropertyCardInner);

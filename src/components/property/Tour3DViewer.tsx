@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Box, X } from "lucide-react";
 import { isValidTourUrl } from "@/lib/property-media";
 
@@ -40,7 +41,11 @@ export function Tour3DViewer({
 
   const embeddable = !!tourUrl && isValidTourUrl(tourUrl);
 
-  return (
+  // Portal a <body>: este visor se monta DENTRO de una tarjeta (o de otro
+  // modal), y la tarjeta es un contexto de apilamiento propio (`isolate`);
+  // sin portal el z-index del overlay quedaba atrapado y las tarjetas
+  // vecinas se pintaban por encima del visor.
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
@@ -90,6 +95,7 @@ export function Tour3DViewer({
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

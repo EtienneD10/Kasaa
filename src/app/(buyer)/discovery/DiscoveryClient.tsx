@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   MapPin,
@@ -84,28 +84,30 @@ export function DiscoveryClient() {
     setVisibleSectionCount(SECTIONS_PER_PAGE);
   }
 
-  function toggleFavorite(id: string) {
+  // Handlers estables (useCallback) para que `PropertyCard` (memo) no se
+  // re-renderice entera con cada tecla en el buscador.
+  const toggleFavorite = useCallback((id: string) => {
     setFavorites((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
-  }
+  }, []);
 
-  function requestVisit(propertyId: string, slot: AvailabilitySlot) {
+  const requestVisit = useCallback((propertyId: string, slot: AvailabilitySlot) => {
     // TODO: POST /api/visits — crea VisitRequest en estado "pendiente",
     // dispara WhatsApp al agente y arranca el timer de 2hs. Ver spec §5.1.
     console.log("Visit requested", propertyId, slot);
-  }
+  }, []);
 
-  function cancelVisit(propertyId: string) {
+  const cancelVisit = useCallback((propertyId: string) => {
     // TODO: PATCH /api/visits/:id — pasa el VisitRequest real a estado
     // "cancelada" (spec §5.1) y para el timer de 2hs si seguía corriendo.
     // "Cancelar" en el estado Sent de `PropertyCard` anula la solicitud
     // de verdad, no es solo cerrar el panel — ver comentario ahí.
     console.log("Visit cancelled", propertyId);
-  }
+  }, []);
 
   // --- Filtro por chips (operación + tipo + apto crédito) ------------------
   const activeTypeChips = useMemo(
@@ -338,7 +340,11 @@ export function DiscoveryClient() {
                     {section.title}
                   </h2>
                   <p className="mb-6 mt-1 text-sm text-buyer-text-muted">{section.subtitle}</p>
-                  <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {/* items-start: una tarjeta que se expande (agendar visita) crece SOLA;
+                      con el stretch por defecto estiraba a todas las de su fila y
+                      las demás quedaban con un hueco blanco, como si también
+                      estuvieran abiertas. */}
+                  <div className="grid grid-cols-1 items-start gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                     {section.properties.map((property) => (
                       <PropertyCard
                         key={`${section.id}-${property.id}`}

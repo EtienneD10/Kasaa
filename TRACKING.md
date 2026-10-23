@@ -514,6 +514,44 @@ silencio:
   se renderice en la grilla y use z-index internos debería llevar
   `isolate` también.
 
+- **Tres correcciones sobre Discovery (rendimiento, tarjeta expandida,
+  visor 3D)**:
+  - **Rendimiento**. Medido en build de producción antes de tocar nada:
+    24 animaciones CSS corriendo permanentemente (una por tarjeta, aunque
+    estuvieran fuera de pantalla), 122 elementos con `backdrop-filter`
+    (el desenfoque sobre contenido animado es de lo más caro de pintar) y
+    51 imágenes. Cambios: (1) `PropertyMedia` usa `IntersectionObserver`
+    (`useInView`) y solo anima/rota fotos en las tarjetas visibles —
+    animaciones activas: 24 → 8 arriba de todo y 4 durante el scroll;
+    (2) se sacó `backdrop-blur` de las tarjetas (122 → 2 elementos; los
+    fondos oscuros subieron un poco de opacidad para que el texto siga
+    legible); (3) imágenes con `loading="lazy"` + `decoding="async"`;
+    (4) `PropertyCard` en `React.memo` y handlers estables (`useCallback`)
+    en `DiscoveryClient`, para que escribir en el buscador no
+    re-renderice todas las tarjetas. **Límites honestos**: las fotos
+    siguen pidiéndose casi todas al cargar (42 requests; el navegador
+    precarga con mucho margen), y mi medición de cuadros en un Chromium
+    sin GPU no detectó diferencia de fps (ya era ~60 en ambos casos), así
+    que la mejora medida es en trabajo evitado (animaciones, blur), no en
+    fps. **Importante**: `npm run dev` es bastante más lento que
+    producción (React en modo desarrollo, compilación bajo demanda); para
+    juzgar la velocidad real usar `npm run build && npm run start`.
+  - **Tarjeta expandida estiraba a las vecinas**: la grilla usaba el
+    `align-items: stretch` por defecto, así que al abrir el agendado de
+    una tarjeta las demás de su fila se estiraban a esa altura y quedaban
+    con un hueco blanco debajo (parecían abiertas). Fix: `items-start` en
+    la grilla de `DiscoveryClient` — ahora crece sólo la que se abre
+    (alturas de la fila: 522/522/609/522 en vez de todas iguales).
+  - **Visor 3D y Quick Look cortados**: regresión mía del `isolate` del
+    arreglo del navbar — como el visor y el Quick Look se montaban dentro
+    de la tarjeta, su `z-index` quedó atrapado en el contexto de apilamiento
+    de ESA tarjeta y las vecinas se pintaban por encima. Fix: ambos se
+    renderizan con `createPortal` en `document.body`. Verificado con
+    `elementFromPoint` (el overlay es lo que queda arriba) y capturas.
+  - Regresión verificada con Playwright sobre producción: flujo
+    "Solicitud enviada" completo, carga de medios del agente → video y
+    visor con iframe, y el arreglo del navbar sigue vigente.
+
 - **`DayTimeSelector` — ventana fija de 4 días desde hoy**: antes la
   fila de días se armaba directo de `Set(slots.map(s => s.date))`, es
   decir, de los offsets sueltos de `availabilityDays` de cada propiedad

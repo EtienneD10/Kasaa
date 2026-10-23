@@ -471,6 +471,36 @@ silencio:
     Órbita, pega https, rechaza http; Discovery muestra el video
     reproduciéndose y "Ver en 3D" abre el iframe con la URL cargada).
 
+- **Flujo post-solicitud de la tarjeta** (pedido del usuario sobre el estado
+  "Solicitud enviada"): al confirmar una visita, el panel "Solicitud
+  enviada" se muestra y **se cierra solo a los 3,5 s**
+  (`SENT_PANEL_AUTOCLOSE_MS` en `PropertyCard.tsx`); la tarjeta vuelve al
+  estado inicial y el CTA "Solicitar Visita" pasa a ser un botón
+  **"🕐 Solicitud enviada"** en ámbar (mismo ámbar del pill "Pendiente de
+  confirmación", la excepción de color ya documentada), para que la
+  persona siga coordinando otras visitas. Interpretaciones mías, a
+  confirmar:
+  - "Inmediatamente" lo tomé como autocierre tras 3,5 s (tiempo para leer
+    el mensaje), no corte instantáneo.
+  - El botón "Solicitud enviada" **es tocable**: reabre el panel (sin
+    autocierre) con "Cancelar" (sigue anulando la visita de verdad, como
+    se pidió antes) y un "Cerrar" nuevo para salir sin cancelar. Si no se
+    quiere tocable, `Cancelar` tendría que vivir en otro lado (Mis
+    Visitas ya cancela).
+  - Mientras haya una solicitud pendiente en esa propiedad **no se puede
+    pedir una segunda visita en la misma tarjeta** (el botón ya no es
+    "Solicitar Visita"); "seguir coordinando otras visitas" lo tomé como
+    otras propiedades. Si se quiere más de una visita por propiedad,
+    hay que decidir cómo se muestra.
+  - El "Solicitar Visita" del Quick Look, si ya hay solicitud, muestra el
+    estado en vez de abrir otro agendado.
+  - El estado de "solicitud enviada" vive en el componente: recargar la
+    página lo reinicia (sin backend), igual que antes.
+  - Verificado con Playwright: panel visible → se cierra solo → botón
+    "Solicitud enviada" en esa tarjeta y las otras 23 intactas → reabrir
+    no se autocierra → Cerrar mantiene el botón → Cancelar devuelve
+    "Solicitar Visita".
+
 - **`DayTimeSelector` — ventana fija de 4 días desde hoy**: antes la
   fila de días se armaba directo de `Set(slots.map(s => s.date))`, es
   decir, de los offsets sueltos de `availabilityDays` de cada propiedad

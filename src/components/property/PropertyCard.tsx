@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Clock,
   Eye,
@@ -53,6 +53,12 @@ import { usePropertyMedia } from "@/lib/property-media";
  * - "Ver más" (junto a "Agenda tu visita inmersiva") ahora abre el Quick
  *   Look de verdad — antes quedaba decorativo porque ese modal no
  *   existía todavía cuando se escribió esa línea.
+ *
+ * FLUJO POST-SOLICITUD (pedido posterior): el panel "Solicitud enviada" se
+ * cierra solo a los 3,5 s y la tarjeta vuelve al estado inicial con el CTA
+ * convertido en "Solicitud enviada 🕐" (ámbar), para poder seguir
+ * coordinando otras visitas. Tocar ese botón reabre el panel (sin
+ * autocierre) con "Cancelar" (anula de verdad) y "Cerrar". Ver TRACKING.md.
  *
  * MEDIOS (pedido posterior): el fondo de la tarjeta ya no es una `<img>`
  * fija sino `PropertyMedia` — video en loop si la propiedad tiene
@@ -122,6 +128,8 @@ import { usePropertyMedia } from "@/lib/property-media";
  *   verificado contra el precio más alto del mock (US$3.800.000), ya
  *   entra completo.
  */
+const SENT_PANEL_AUTOCLOSE_MS = 3500;
+
 interface PropertyCardProps {
   property: Property;
   onRequestVisit: (propertyId: string, slot: AvailabilitySlot) => void;
@@ -148,9 +156,30 @@ export function PropertyCard({
   // destacada/la primera al expandir, lo que saltaba ese paso.
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
+  // Panel "Solicitud enviada": se muestra al confirmar y se cierra solo
+  // (`SENT_PANEL_AUTOCLOSE_MS`) volviendo a la tarjeta inicial, donde el CTA
+  // pasa a ser "Solicitud enviada 🕐" — así la persona puede seguir
+  // coordinando otras visitas sin quedar atrapada en el panel. Tocar ese
+  // botón lo reabre (sin autocierre) para ver el estado o cancelar.
+  const [showSentPanel, setShowSentPanel] = useState(false);
+  const [sentAutoClose, setSentAutoClose] = useState(false);
   const [showQuickLook, setShowQuickLook] = useState(false);
   const [show3D, setShow3D] = useState(false);
   const { tourUrl } = usePropertyMedia(property);
+
+  function closeSentPanel() {
+    setShowSentPanel(false);
+    setSentAutoClose(false);
+    setExpanded(false);
+    setSelectedDate(null);
+    setSelectedTime(null);
+  }
+
+  useEffect(() => {
+    if (!showSentPanel || !sentAutoClose) return;
+    const id = setTimeout(closeSentPanel, SENT_PANEL_AUTOCLOSE_MS);
+    return () => clearTimeout(id);
+  }, [showSentPanel, sentAutoClose]);
 
   const statusLabel = property.operation === "venta" ? "VENTA" : "ALQUILER";
   const canConfirm = !!(selectedDate && selectedTime);
@@ -163,6 +192,8 @@ export function PropertyCard({
     if (canConfirm && selectedDate && selectedTime) {
       const slot = { date: selectedDate, time: selectedTime };
       setRequestSent(slot);
+      setShowSentPanel(true);
+      setSentAutoClose(true);
       onRequestVisit(property.id, slot);
     }
   }
@@ -174,7 +205,7 @@ export function PropertyCard({
         className
       )}
     >
-      {!expanded && !requestSent ? (
+      {!expanded && !showSentPanel ? (
         /* Estado Default — full-bleed real: la foto llena TODA la tarjeta
            (sin aspect-ratio fijo, alto lo da el contenido) y absolutamente
            todo, botones incluidos, vive superpuesto sobre ella con
@@ -309,12 +340,30 @@ export function PropertyCard({
               >
                 Ver en 3D
               </button>
-              <button
-                onClick={handlePrimaryAction}
-                className="flex flex-1 items-center justify-center rounded-xl bg-accent py-3 text-xs font-bold text-black"
-              >
-                Solicitar Visita
-              </button>
+              {requestSent ? (
+                // Ya hay una visita pedida en esta propiedad: el CTA pasa a
+                // ser "Solicitud enviada" + reloj (mismo ámbar del pill
+                // "Pendiente de confirmación", la excepción de color ya
+                // documentada). Tocarlo reabre el panel con el estado y
+                // "Cancelar".
+                <button
+                  onClick={() => {
+                    setSentAutoClose(false);
+                    setShowSentPanel(true);
+                  }}
+                  aria-label="Solicitud enviada — ver estado"
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-status-amber-bg py-3 text-xs font-bold text-status-amber-text"
+                >
+                  <Clock size={13} /> Solicitud enviada
+                </button>
+              ) : (
+                <button
+                  onClick={handlePrimaryAction}
+                  className="flex flex-1 items-center justify-center rounded-xl bg-accent py-3 text-xs font-bold text-black"
+                >
+                  Solicitar Visita
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -340,7 +389,7 @@ export function PropertyCard({
           </div>
 
           {/* Franja blanca — scheduling footer */}
-          {!requestSent && (
+          {!showSentPanel && (
             <div className="bg-white p-4">
               <div className="space-y-3">
               <div className="flex items-center justify-between">
@@ -416,7 +465,7 @@ export function PropertyCard({
         </>
       )}
 
-      {requestSent && (
+      {showSentPanel && requestSent && (
         <div className="flex flex-col items-center bg-white px-6 py-8 text-center">
           <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-buyer-border">
             <Hourglass size={20} className="text-buyer-text-muted" />
@@ -436,13 +485,17 @@ export function PropertyCard({
               // eso dispara `onCancelVisit` antes de resetear la UI local.
               onCancelVisit?.(property.id);
               setRequestSent(null);
-              setExpanded(false);
-              setSelectedDate(null);
-              setSelectedTime(null);
+              closeSentPanel();
             }}
             className="mt-4 text-xs font-semibold text-buyer-text-muted underline"
           >
             Cancelar
+          </button>
+          <button
+            onClick={closeSentPanel}
+            className="mt-2 text-xs font-semibold text-buyer-text-faint underline"
+          >
+            Cerrar
           </button>
         </div>
       )}
@@ -463,7 +516,14 @@ export function PropertyCard({
           onToggleFavorite={onToggleFavorite}
           onRequestVisitClick={() => {
             setShowQuickLook(false);
-            setExpanded(true);
+            // Si ya hay una solicitud enviada, "Solicitar Visita" del Quick
+            // Look muestra su estado en vez de abrir otro agendado.
+            if (requestSent) {
+              setSentAutoClose(false);
+              setShowSentPanel(true);
+            } else {
+              setExpanded(true);
+            }
           }}
         />
       )}

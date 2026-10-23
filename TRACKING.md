@@ -501,6 +501,19 @@ silencio:
     no se autocierra → Cerrar mantiene el botón → Cancelar devuelve
     "Solicitar Visita".
 
+- **Bug: las tarjetas se superponían al navbar/barra de filtros al hacer
+  scroll en Discovery**: los overlays internos de `PropertyCard` (badges,
+  íconos flotantes, bloque de texto) usan `z-10`, igual que la barra de
+  filtros sticky de Discovery (`sticky top-20 z-10`); con el mismo z-index
+  gana el que está más tarde en el DOM, así que los badges se pintaban POR
+  ENCIMA de la barra al pasar por debajo. Fix: `isolate` en el contenedor
+  raíz de la tarjeta (contiene sus z-index internos en su propio contexto
+  de apilamiento). Verificado con Playwright: con el scroll posicionado
+  bajo la barra, `elementFromPoint` devolvía el badge sin el fix y deja de
+  hacerlo con el fix (captura antes/después). Cualquier otro componente que
+  se renderice en la grilla y use z-index internos debería llevar
+  `isolate` también.
+
 - **`DayTimeSelector` — ventana fija de 4 días desde hoy**: antes la
   fila de días se armaba directo de `Set(slots.map(s => s.date))`, es
   decir, de los offsets sueltos de `availabilityDays` de cada propiedad

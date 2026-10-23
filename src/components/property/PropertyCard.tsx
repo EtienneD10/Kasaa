@@ -201,7 +201,11 @@ export function PropertyCard({
   return (
     <div
       className={cn(
-        "flex flex-col overflow-hidden rounded-card border border-buyer-border bg-buyer-surface transition-shadow hover:shadow-lg",
+        // `isolate`: los overlays internos (badges, íconos, textos: `z-10`)
+        // quedan contenidos en la tarjeta. Sin esto empataban el z-index de
+        // la barra de filtros sticky de Discovery (`z-10`) y, al scrollear,
+        // se pintaban POR ENCIMA de ella/del navbar.
+        "isolate flex flex-col overflow-hidden rounded-card border border-buyer-border bg-buyer-surface transition-shadow hover:shadow-lg",
         className
       )}
     >

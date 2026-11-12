@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useId, useState } from "react";
 import {
   Clock,
   Eye,
@@ -11,6 +11,7 @@ import {
   CalendarClock,
   Hourglass,
   MapPin,
+  X,
 } from "lucide-react";
 import { cn, formatPrice, timeAgo } from "@/lib/utils";
 import type { Property, AvailabilitySlot } from "@/types";
@@ -19,6 +20,7 @@ import { PropertyQuickLookModal } from "@/components/property/PropertyQuickLookM
 import { PropertyMedia } from "@/components/property/PropertyMedia";
 import { Tour3DViewer } from "@/components/property/Tour3DViewer";
 import { usePropertyMedia } from "@/lib/property-media";
+import { useLoginGate } from "@/lib/login-gate";
 
 /**
  * Componente maestro del sistema — reconstruido a partir del archivo real
@@ -67,6 +69,10 @@ import { usePropertyMedia } from "@/lib/property-media";
  * `tourUrl` que cargó el agente. El estado Default muestra al agente
  * (avatar + nombre + agencia) en una fila propia. Detalle y límites en
  * TRACKING.md, "Medios de la propiedad".
+ *
+ * FEED INMERSIVO: la solicitud enviada (`requestedSlot`) ahora la maneja el
+ * padre (`DiscoveryClient`), compartida con `ImmersiveFeed` — pedir o
+ * cancelar una visita en uno se refleja en el otro.
  *
  * CORRECCIÓN (referencia "tarjeta principal", buena resolución 1051×617,
  * un solo card recortado con anotación del usuario) — el estado Default
@@ -129,26 +135,42 @@ import { usePropertyMedia } from "@/lib/property-media";
  *   entra completo.
  */
 const SENT_PANEL_AUTOCLOSE_MS = 3500;
+// Agendado abierto sin confirmar: se cierra solo tras 10 s sin interacción
+// (pedido del usuario: "si no se decidió y quiere seguir viendo"). Elegir
+// día u horario reinicia la cuenta, y se pausa con Quick Look / 3D abiertos.
+export const SCHEDULING_IDLE_CLOSE_MS = 10_000;
+// Una sola agenda abierta a la vez (pedido del usuario): al abrir la de una
+// tarjeta se avisa por este evento y las demás que tengan la suya abierta
+// sin confirmar se cierran. El id es por INSTANCIA (`useId`), no por
+// propiedad: la misma propiedad puede aparecer en dos secciones.
+const SCHEDULING_OPENED_EVENT = "kasaa:scheduling-opened";
 
 interface PropertyCardProps {
   property: Property;
+  /** Solicitud de visita ya enviada para esta propiedad (o null). Vive en el
+   * padre, no en la tarjeta, para que la tarjeta y el Feed inmersivo
+   * muestren el mismo estado — antes era un `useState` local. */
+  requestedSlot?: AvailabilitySlot | null;
   onRequestVisit: (propertyId: string, slot: AvailabilitySlot) => void;
   onCancelVisit?: (propertyId: string) => void;
   onToggleFavorite?: (propertyId: string) => void;
+  /** "Ver visita inmersiva completa" del Quick Look → Feed inmersivo. */
+  onOpenImmersive?: (property: Property) => void;
   isFavorite?: boolean;
   className?: string;
 }
 
 function PropertyCardInner({
   property,
+  requestedSlot: requestSent = null,
   onRequestVisit,
   onCancelVisit,
   onToggleFavorite,
+  onOpenImmersive,
   isFavorite = false,
   className,
 }: PropertyCardProps) {
   const [expanded, setExpanded] = useState(false);
-  const [requestSent, setRequestSent] = useState<AvailabilitySlot | null>(null);
   // Arranca sin día seleccionado — el frame `property-card-booking-states`
   // de Figma muestra "SIN SELECCIONAR" como un paso propio (solo la fila de
   // días, sin fila de horarios, botón deshabilitado) antes de
@@ -166,6 +188,20 @@ function PropertyCardInner({
   const [showQuickLook, setShowQuickLook] = useState(false);
   const [show3D, setShow3D] = useState(false);
   const { tourUrl } = usePropertyMedia(property);
+  const instanceId = useId();
+  const { requireBuyer } = useLoginGate();
+
+  // Agendar requiere sesión de comprador: sin sesión aparece el recuadro de
+  // inicio de sesión y, al entrar, se abre la agenda de ESTA tarjeta.
+  function openScheduling() {
+    requireBuyer(
+      () => {
+        setExpanded(true);
+        window.dispatchEvent(new CustomEvent(SCHEDULING_OPENED_EVENT, { detail: instanceId }));
+      },
+      { propertyTitle: property.title }
+    );
+  }
 
   function closeSentPanel() {
     setShowSentPanel(false);
@@ -181,17 +217,37 @@ function PropertyCardInner({
     return () => clearTimeout(id);
   }, [showSentPanel, sentAutoClose]);
 
+  // `closeSentPanel` también resetea el agendado (expanded + selección).
+  const closeScheduling = closeSentPanel;
+
+  useEffect(() => {
+    if (!expanded || showSentPanel || showQuickLook || show3D) return;
+    const id = setTimeout(closeScheduling, SCHEDULING_IDLE_CLOSE_MS);
+    return () => clearTimeout(id);
+    // selectedDate/selectedTime en deps: cada elección reinicia los 10 s.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expanded, showSentPanel, showQuickLook, show3D, selectedDate, selectedTime]);
+
+  useEffect(() => {
+    if (!expanded || showSentPanel) return;
+    function onOtherOpened(e: Event) {
+      if ((e as CustomEvent<string>).detail !== instanceId) closeScheduling();
+    }
+    window.addEventListener(SCHEDULING_OPENED_EVENT, onOtherOpened);
+    return () => window.removeEventListener(SCHEDULING_OPENED_EVENT, onOtherOpened);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expanded, showSentPanel, instanceId]);
+
   const statusLabel = property.operation === "venta" ? "VENTA" : "ALQUILER";
   const canConfirm = !!(selectedDate && selectedTime);
 
   function handlePrimaryAction() {
     if (!expanded) {
-      setExpanded(true);
+      openScheduling();
       return;
     }
     if (canConfirm && selectedDate && selectedTime) {
       const slot = { date: selectedDate, time: selectedTime };
-      setRequestSent(slot);
       setShowSentPanel(true);
       setSentAutoClose(true);
       onRequestVisit(property.id, slot);
@@ -400,12 +456,21 @@ function PropertyCardInner({
                 <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-buyer-text-faint">
                   <CalendarClock size={12} /> Agenda tu visita inmersiva
                 </p>
-                <button
-                  onClick={() => setShowQuickLook(true)}
-                  className="text-[11px] font-semibold text-accent"
-                >
-                  Ver más
-                </button>
+                <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    onClick={() => setShowQuickLook(true)}
+                    className="whitespace-nowrap text-[11px] font-semibold text-accent"
+                  >
+                    Ver más
+                  </button>
+                  <button
+                    onClick={closeScheduling}
+                    aria-label="Cerrar agenda"
+                    className="-mr-1 flex h-6 w-6 items-center justify-center rounded-full text-buyer-text-faint transition-colors hover:bg-buyer-bg hover:text-buyer-text"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
               </div>
 
               <DayTimeSelector
@@ -488,7 +553,6 @@ function PropertyCardInner({
               // "cancelada", spec §5.1), no es solo cerrar el panel — por
               // eso dispara `onCancelVisit` antes de resetear la UI local.
               onCancelVisit?.(property.id);
-              setRequestSent(null);
               closeSentPanel();
             }}
             className="mt-4 text-xs font-semibold text-buyer-text-muted underline"
@@ -518,6 +582,13 @@ function PropertyCardInner({
           onClose={() => setShowQuickLook(false)}
           isFavorite={isFavorite}
           onToggleFavorite={onToggleFavorite}
+          onOpenImmersive={
+            onOpenImmersive &&
+            ((p) => {
+              setShowQuickLook(false);
+              onOpenImmersive(p);
+            })
+          }
           onRequestVisitClick={() => {
             setShowQuickLook(false);
             // Si ya hay una solicitud enviada, "Solicitar Visita" del Quick
@@ -526,7 +597,7 @@ function PropertyCardInner({
               setSentAutoClose(false);
               setShowSentPanel(true);
             } else {
-              setExpanded(true);
+              openScheduling();
             }
           }}
         />

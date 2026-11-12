@@ -36,9 +36,12 @@ silencio:
 - **Sin campanita de notificaciones en el Header** — no está en el diseño
   real. El Centro de Notificaciones (spec §3.14) va a necesitar otra
   entrada cuando se construya esa pantalla.
-- **Comprador logueado sigue viendo "Anunciar propiedad"** (como link de
-  texto) — la spec decía que no debía verse para ese rol; el Figma lo
-  muestra igual.
+- ~~**Comprador logueado sigue viendo "Anunciar propiedad"**~~ —
+  **revertido a pedido del usuario**: con sesión de comprador el link ya no
+  aparece en el Header (vuelve a coincidir con la spec §2, aunque el Figma
+  lo mostraba). El invitado lo sigue viendo. Como acceso para agentes, el
+  Landing tiene ahora un botón "Ingresar como agente" debajo de "o explorá
+  todas las propiedades" (lleva a `/agente/login`).
 - **`PropertyCard` es full-bleed vertical** (foto ocupando toda la tarjeta,
   `aspect-[316/512]`, info superpuesta con gradiente), no
   foto+bloque-de-info-blanco+footer-blanco como se había construido
@@ -501,6 +504,97 @@ silencio:
     no se autocierra → Cerrar mantiene el botón → Cancelar devuelve
     "Solicitar Visita".
 
+- **Cerrar el agendado sin confirmar** (pedido del usuario sobre una captura
+  del estado Scheduling):
+  - **✕ chica** arriba a la derecha del bloque blanco, junto a "Ver más":
+    vuelve la tarjeta al estado inicial y descarta la selección.
+  - **Autocierre a los 10 s sin interacción**
+    (`SCHEDULING_IDLE_CLOSE_MS` en `PropertyCard.tsx`). Interpretación: cada
+    vez que se elige un día u horario la cuenta vuelve a 10 s, para que no
+    se cierre en la cara de quien está eligiendo. Se pausa con el Quick Look
+    o el visor 3D abiertos encima. El panel de booking del Feed inmersivo
+    usa la misma regla (ya tenía su ✕).
+  - **Una sola agenda abierta a la vez**: si se abre el agendado de otra
+    tarjeta, la que estaba abierta sin confirmar se cierra sola y descarta
+    la selección. Va por un evento de `window` (`kasaa:scheduling-opened`)
+    con un id por instancia (`useId`), no por propiedad, porque la misma
+    propiedad puede estar en dos secciones. Así no hubo que subir el
+    `expanded` de cada tarjeta a `DiscoveryClient` (lo que re-renderizaría
+    toda la grilla). No afecta a una tarjeta que esté mostrando el panel
+    "Solicitud enviada".
+  - **Cursor de mano en todos los botones**: Tailwind v4 dejó los `<button>`
+    con `cursor: default`; regla global en `@layer base` de `globals.css`
+    (los deshabilitados conservan `cursor-not-allowed`). También aplica a
+    los botones decorativos ("Próximamente").
+  - De paso: la fila de días de `DayTimeSelector` no entraba en el ancho de
+    la tarjeta (chips con `min-w-[64px]`) y quedaba scrolleada, cortando el
+    primer día ("OM 25 / OY" en la captura). Ahora los 4 chips se reparten
+    el ancho (`min-w-0 flex-1`).
+
+- **Búsqueda IA: texto libre → filtros** (cierra la decisión abierta #8;
+  `lib/ai-search.ts`). Sin frame de Figma a mano: se armó a partir de la
+  descripción de #8 y del spec §3.3/§3.8.
+  - **No es un LLM**: es un intérprete por palabras clave (la opción
+    "funcional con campos mock" que había elegido el usuario). Reconoce
+    barrio/ciudad del catálogo, venta/alquiler, tipo (depto, ático,
+    monoambiente, chalet, etc.), amenities (pet friendly/mascotas,
+    balcón/terraza, piscina/pileta, vista al mar, parques, metro/subte),
+    dormitorios, ambientes (N ambientes = N-1 dorm.; 1 ambiente =
+    estudio), baños, precio ("hasta 400k", "desde 300.000", "2 millones"),
+    m², piso ("piso alto", "piso 5"), ascensor, cochera, a estrenar, apto
+    crédito y financiación. Cuando haya backend, `interpretSearch()` es el
+    punto a reemplazar por un modelo real con la misma salida.
+  - **Se aplica sobre el estado real de filtros** (no uno paralelo): lo
+    interpretado queda tildado en el panel de Filtros avanzados, y quitar
+    un chip quita ese filtro. Una búsqueda nueva reemplaza lo que había
+    agregado la anterior, sin tocar filtros puestos a mano. Si se saca un
+    filtro desde el panel, su chip desaparece de la franja.
+  - **Franja "Resultados para tu búsqueda"** en Discovery: la query entre
+    comillas, chips descartables y "Limpiar búsqueda". Las palabras que no
+    se pudieron interpretar se muestran ("Sin filtro para: luminoso — probá
+    con los Filtros avanzados") en vez de ignorarse en silencio. Con la
+    franja visible se ocultan los pills genéricos de operación y "N filtros
+    avanzados" (ya están como chips). El estado vacío "filtros restrictivos"
+    también lista los chips de la IA para poder quitarlos.
+  - **Entradas**: buscador del Header (Enter o el ✦, que ahora es botón) y
+    el textarea "Búsqueda IA" del panel, que ganó tags sugeridos (spec
+    §3.8: "+ Pet friendly", "+ Cerca del metro", etc.). Si el texto no
+    tiene nada reconocible, se comporta como antes (búsqueda de texto, que
+    puede terminar en "zona sin cobertura").
+  - **Interpretaciones a confirmar**: "terraza" se mapea a la amenity
+    "balcón" (no hay campo terraza); "nuevo/a" a "a estrenar"; "playa" a
+    vista al mar; el precio no distingue moneda (igual que el panel, el
+    mock mezcla USD y EUR).
+  - **Fix de datos mock de paso**: las amenities se derivaban sólo del
+    índice, así que "Casa Moderna con Piscina" (p8) tenía `piscina: false`.
+    Ahora lo que promete el título (piscina, terraza/balcón, vistas al mar)
+    siempre cuenta.
+
+- **Agendar requiere sesión iniciada** (pedido del usuario): sin sesión de
+  comprador, "Solicitar Visita" (tarjeta, Quick Look o Feed inmersivo) abre
+  un recuadro de inicio de sesión en lugar de la agenda.
+  - `lib/login-gate.tsx` (`LoginGateProvider` en el layout raíz +
+    `useLoginGate().requireBuyer(acción)`): con sesión de comprador ejecuta
+    la acción al instante; si no, abre `LoginRequiredModal` y la ejecuta
+    cuando la persona entra. **Se retoma lo que estaba haciendo**: se abre
+    sola la agenda de la tarjeta (o el panel del feed) que había tocado. Si
+    cierra el recuadro (✕, Esc o clic afuera) no se abre nada.
+  - El recuadro usa exactamente el mismo formulario que `/login`: se extrajo
+    a `components/auth/BuyerAuthForm.tsx` (tabs Iniciar sesión / Crear
+    cuenta, mismos campos y login social decorativo); la página `/login`
+    ahora solo lo envuelve. Sigue siendo el auth mock en memoria (decisión
+    abierta #2): recargar la página vuelve a invitado.
+  - **Sesión de agente**: agendar es una acción de comprador, así que un
+    agente logueado también ve el recuadro (con un aviso de que su sesión
+    es de agente) y, si entra, pasa a sesión de comprador.
+  - Las solicitudes enviadas solo se muestran con sesión de comprador: al
+    cerrar sesión las tarjetas vuelven a "Solicitar Visita" (en este mock
+    reaparecen si se vuelve a entrar en la misma pestaña, porque no hay
+    usuario real al que asociarlas).
+  - z-index del recuadro: 70, por encima del feed (45), Quick Look (50) y
+    visor 3D (60). Su Escape se toma en fase de captura para no cerrar
+    también el feed o el Quick Look de abajo.
+
 - **Bug: las tarjetas se superponían al navbar/barra de filtros al hacer
   scroll en Discovery**: los overlays internos de `PropertyCard` (badges,
   íconos flotantes, bloque de texto) usan `z-10`, igual que la barra de
@@ -568,6 +662,56 @@ silencio:
   y el reagendado de `MisVisitasPanel`. Verificado con Playwright en
   varias propiedades del mock, incluida una con día sin horarios
   (`day4-clicked.png`).
+
+- **Feed inmersivo** (`components/property/ImmersiveFeed.tsx` +
+  `lib/immersive-queue.ts`, spec §3.6). **Sin frame de Figma de
+  referencia**: no se tenía el enlace al archivo en esta sesión, así que se
+  construyó desde el spec y reusando el lenguaje visual del estado Default
+  de `PropertyCard`. Si existe un frame del feed, hay que revisarlo contra
+  ese frame.
+  - **Overlay sobre Discovery, no una ruta nueva**: Discovery queda montado
+    debajo, así que "Volver a resultados" vuelve a la misma posición de
+    scroll y con los mismos filtros sin serializarlos en la URL. Costo: no
+    hay URL propia para compartir un feed, y el botón "atrás" del
+    navegador no cierra el feed (sale de Discovery). Si se quiere eso, el
+    paso siguiente es un query param + `history.pushState`.
+  - **Entrada**: "Ver visita inmersiva completa" del Quick Look (era
+    decorativo). Arranca por la propiedad que se esté viendo en el modal,
+    incluida una relacionada.
+  - **Swipe = scroll-snap nativo** (táctil, rueda, trackpad, ↑/↓ del
+    teclado, botones ↑/↓ al costado en desktop), columna 9:16 centrada en
+    desktop y pantalla completa en mobile. Esc cierra.
+  - **Cola de similares**: puntaje por misma operación (peso alto), barrio,
+    tipo, cercanía de precio (misma moneda) y dormitorios. Arranca con la
+    propiedad elegida más 4 similares y agrega 4 más cada vez que quedan 2
+    por delante, siempre a partir de la propiedad que se está viendo, no de
+    la primera. El pool es el resultado ya filtrado de Discovery, así que
+    respeta los filtros. Cuando se agota, recicla las vistas hace más
+    tiempo (loop interno). Pesos elegidos a mano, sin datos de uso.
+  - **Overlays iguales a la tarjeta** más dos agregados: un pill con el
+    motivo ("Mismo barrio" / "Mismo tipo" / "Precio similar") y un botón de
+    sonido en la pila, que solo aparece si la propiedad tiene video real
+    (`PropertyMedia` ganó la prop `muted`). La grilla abre el Quick Look
+    encima del feed; desde ahí, "Ver visita inmersiva" de una relacionada
+    la inserta como siguiente en la cola.
+  - **Booking**: panel blanco que sube desde abajo dentro de la columna
+    (no modal), con el mismo `DayTimeSelector` y el mismo flujo
+    post-solicitud que la tarjeta (autocierre a 3,5 s, CTA ámbar "Solicitud
+    enviada", Cancelar anula). Mientras está abierto no se puede deslizar.
+  - **Cambio en `PropertyCard`**: la solicitud enviada dejó de ser
+    `useState` local y pasó a `DiscoveryClient` (`requestedVisits`, un `Map`
+    por propiedad, prop `requestedSlot`), para que tarjeta y feed muestren
+    lo mismo. Efecto colateral bueno: si la misma propiedad aparece en dos
+    secciones de Discovery, ahora ambas tarjetas muestran "Solicitud
+    enviada" (antes solo la que se había tocado).
+  - **Rendimiento**: solo las slides vecinas a la activa (±1) montan
+    `PropertyMedia`; el resto muestra la primera foto estática con
+    `loading="lazy"`.
+  - De paso: `PropertyQuickLookModal` restaura el `overflow` previo del body
+    al cerrarse (antes lo vaciaba, lo que destrababa el scroll de Discovery
+    al cerrar un Quick Look abierto encima del feed), y el ícono `Map` de
+    lucide en `DiscoveryClient` se renombró a `MapIcon` porque pisaba al
+    `Map` nativo.
 
 Con esto, `/agente` dejó de ser un 404: ahora existe un gate por rol
 (`agente/page.tsx`) — invitado se redirige a `/agente/login`, comprador ve
@@ -968,11 +1112,11 @@ elegir proveedor de auth real (decisión abierta #2) esto se resuelve solo.
 - [x] Propiedades (`PropertiesTable.tsx`, `/agente/propiedades`) — tabla con selección múltiple, búsqueda y paginación reales; regla de 20 días derivada (`lib/property-status.ts::getListingStatus()`) + modal "¿Sigue disponible?" (`ConfirmListingModal.tsx`), integrado con el link "Confirmar vigencia" de Atención Requerida del Dashboard Home (`?confirmar=<id>`); ver sección "Rediseño 2026-08" para el detalle completo, incluyendo el cambio retroactivo intencional al badge de p25 en el Dashboard
 - [x] Medios de propiedad (`PropertyMedia.tsx`, `Tour3DViewer.tsx`, `PropertyMediaModal.tsx`, `lib/property-media.tsx`) — video en loop, recorrido dron simulado con fotos y visor 3D por enlace; ver sección "Rediseño 2026-08" para lo que es real y lo que falta (storage/backend)
 - [x] Agenda (`AgentAgenda.tsx`, `/agente/agenda`) — calendario semanal real (visitas ubicadas por fecha/hora real, filtros de propiedad/estado reales, confirmar/cancelar visita real) + detección real de conflictos de horario y el wizard de 3 pasos "Flujo de Resolución de Conflictos" (`ConflictResolutionModal.tsx`) + "Bloquear horario" (`BlockScheduleModal.tsx`); ver sección "Rediseño 2026-08" para el detalle completo de decisiones y desvíos. Vista "Mes" queda decorativa (sólo se construyó Semana)
+- [x] Búsqueda IA (`lib/ai-search.ts`) — texto libre → filtros estructurados + franja "Resultados para tu búsqueda" con chips descartables, desde el Header y el panel; intérprete por palabras clave, no LLM (decisión abierta #8 resuelta), ver "Rediseño 2026-08"
+- [x] Feed inmersivo (`ImmersiveFeed.tsx` + `lib/immersive-queue.ts`) — overlay 9:16 sobre Discovery con swipe por scroll-snap, cola de similares dinámica, overlays de la tarjeta y booking que sube desde abajo; solicitudes compartidas con `PropertyCard`. Sin frame de Figma de referencia, ver sección "Rediseño 2026-08"
 
 ### 🔲 App compradora — pendiente
 - [ ] Discovery: vista Mapa real (hoy es placeholder con lista + panel "próximamente" — falta elegir proveedor: Mapbox/Google Maps/MapLibre, ver decisión abierta #5)
-- [ ] Feed inmersivo (swipe + cola de similares)
-- [ ] Franja de "búsqueda interpretada" + chips descartables en el estado de resultados de Discovery, y que "Búsqueda IA" del panel de filtros arme filtros de verdad a partir de texto libre (decisión abierta #8)
 - [ ] Contenido real de las tabs Notificaciones / Búsquedas / Privacidad del drawer de Configuración (hoy placeholder), y pantallas de Favoritos / Búsquedas guardadas del dropdown de cuenta (también decorativos — no hay modelo de datos para ninguno de los dos todavía)
 - [ ] Perfil de agente (página pública)
 - [ ] Centro de notificaciones — la campanita del Header ya tiene el badge pero no abre nada todavía
@@ -1005,7 +1149,7 @@ elegir proveedor de auth real (decisión abierta #2) esto se resuelve solo.
 5. **Proveedor de mapas**: Vista Mapa (spec §3.3) necesita Mapbox, Google Maps o MapLibre para el mapa interactivo + clustering de pines — no definido todavía, hoy es un placeholder (`MapaPlaceholder` en `DiscoveryClient.tsx`).
 6. **Fotos mock vía Unsplash**: `lib/mock-data.ts` usa URLs `images.unsplash.com` como placeholder (igual que las 3 propiedades originales) — funcionan en cualquier entorno con salida a internet normal, pero no cargan en este sandbox de desarrollo (dominio no permitido). No es un bug del código.
 7. **Fuente de verdad de diseño**: a partir del rediseño 2026-08, el archivo real de Figma (`kasaaEstilo1`, conectado vía MCP) manda sobre `kasaa-spec-completa.md` en cuestiones de layout/composición visual — el spec sigue siendo la referencia de comportamiento, reglas de negocio y flujos. Si aparece un nuevo desvío entre ambos al construir una pantalla pendiente, resolverlo a favor del Figma y anotarlo en la sección "Rediseño 2026-08" de este archivo.
-8. **Interpretación de "Búsqueda IA" (texto libre → filtros estructurados)**: el frame `desktop-discovery-ai-search` muestra un estado de Discovery donde una búsqueda en lenguaje natural (ej. "depto luminoso pet friendly cerca de parques") se traduce en una franja "Resultados para tu búsqueda" con chips descartables ("Pet Friendly", "Cerca de parques", etc.) y en el panel de Filtros avanzados los checkboxes correspondientes de "Estado de vida" quedarían tildados. El usuario eligió (cuando se preguntó) la opción "funcional con nuevos campos mock" para esto — los campos ya existen ahora (`Property.amenities`, agregados para el panel de Filtros avanzados), pero falta: (a) la franja de búsqueda interpretada en el estado de resultados de Discovery, y (b) la lógica de keywords que mapea texto libre → `amenities`/chips. El textarea "Búsqueda IA" del panel de filtros hoy solo alimenta el buscador de texto plano, no arma filtros. Próximo paso lógico cuando se retome.
+8. ~~**Interpretación de "Búsqueda IA" (texto libre → filtros estructurados)**: el frame `desktop-discovery-ai-search` muestra un estado de Discovery donde una búsqueda en lenguaje natural (ej. "depto luminoso pet friendly cerca de parques") se traduce en una franja "Resultados para tu búsqueda" con chips descartables ("Pet Friendly", "Cerca de parques", etc.) y en el panel de Filtros avanzados los checkboxes correspondientes de "Estado de vida" quedarían tildados. El usuario eligió (cuando se preguntó) la opción "funcional con nuevos campos mock" para esto — los campos ya existen ahora (`Property.amenities`, agregados para el panel de Filtros avanzados), pero falta: (a) la franja de búsqueda interpretada en el estado de resultados de Discovery, y (b) la lógica de keywords que mapea texto libre → `amenities`/chips. El textarea "Búsqueda IA" del panel de filtros hoy solo alimenta el buscador de texto plano, no arma filtros. Próximo paso lógico cuando se retome.~~ **Resuelta**: implementada con un intérprete por palabras clave (`lib/ai-search.ts`), ver sección "Rediseño 2026-08". Queda abierto reemplazarlo por un modelo real cuando haya backend.
 
 ---
 

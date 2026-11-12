@@ -54,10 +54,12 @@ function useInView<T extends Element>(rootMargin = "150px") {
 function LoopVideo({
   src,
   poster,
+  muted,
   onFail,
 }: {
   src: string;
   poster?: string;
+  muted: boolean;
   onFail: () => void;
 }) {
   const ref = useRef<HTMLVideoElement>(null);
@@ -81,7 +83,7 @@ function LoopVideo({
       ref={ref}
       src={src}
       poster={poster}
-      muted
+      muted={muted}
       loop
       playsInline
       preload="metadata"
@@ -156,7 +158,15 @@ export function DroneReel({
   );
 }
 
-export function PropertyMedia({ property }: { property: Property }) {
+export function PropertyMedia({
+  property,
+  muted = true,
+}: {
+  property: Property;
+  /** Sólo el Feed inmersivo lo destraba (botón de sonido); en la grilla y
+   * el Quick Look el video siempre va mudo. */
+  muted?: boolean;
+}) {
   const { videoUrl, droneStyle } = usePropertyMedia(property);
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const [ref, inView] = useInView<HTMLDivElement>();
@@ -167,6 +177,7 @@ export function PropertyMedia({ property }: { property: Property }) {
       <LoopVideo
         src={videoUrl}
         poster={property.photos[0]}
+        muted={muted}
         onFail={() => setFailedSrc(videoUrl)}
       />
     );

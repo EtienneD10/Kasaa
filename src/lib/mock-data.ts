@@ -1039,14 +1039,23 @@ function toProperty(bp: Blueprint, index: number): Property {
     // "ESTADO DE VIDA" del panel de Filtros avanzados — sin backend
     // todavía, así que se derivan de forma determinística (índice + tipo/
     // barrio) en vez de random, para que los resultados sean estables
-    // entre renders.
+    // entre renders. Lo que el TÍTULO promete (piscina, terraza/balcón,
+    // vistas al mar) siempre cuenta — antes "Casa Moderna con Piscina"
+    // quedaba con piscina: false por caer en un índice impar, y la búsqueda
+    // IA / el panel no la encontraban.
     amenities: {
       petFriendly: index % 3 !== 0,
-      balcon: bp.type !== "local" && bp.type !== "oficina" && index % 2 === 0,
+      balcon:
+        /terraza|balc[oó]n/i.test(bp.title) ||
+        (bp.type !== "local" && bp.type !== "oficina" && index % 2 === 0),
       piscina:
-        (bp.type === "casa" || bp.type === "chalet" || bp.type === "finca_rustica") &&
-        index % 2 === 0,
-      vistaAlMar: ["Barceloneta", "Diagonal Mar"].includes(bp.neighborhood) || index % 6 === 0,
+        /piscina/i.test(bp.title) ||
+        ((bp.type === "casa" || bp.type === "chalet" || bp.type === "finca_rustica") &&
+          index % 2 === 0),
+      vistaAlMar:
+        /vistas? al mar|frente al mar/i.test(bp.title) ||
+        ["Barceloneta", "Diagonal Mar"].includes(bp.neighborhood) ||
+        index % 6 === 0,
       cercaDeParques: index % 4 !== 3,
       cercaDeMetro: bp.type !== "finca_rustica" && index % 3 !== 2,
     },

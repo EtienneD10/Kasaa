@@ -6,7 +6,7 @@ import {
   MapPin,
   Sparkles,
   SlidersHorizontal,
-  Map,
+  Map as MapIcon,
   LayoutGrid,
   X,
   Landmark,
@@ -15,6 +15,7 @@ import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { PropertyCard } from "@/components/property/PropertyCard";
 import { InterstitialCard } from "@/components/property/InterstitialCard";
+import { ImmersiveFeed } from "@/components/property/ImmersiveFeed";
 import { DiscoveryEmptyState } from "@/components/discovery/DiscoveryEmptyState";
 import { AdvancedFiltersPanel } from "@/components/discovery/AdvancedFiltersPanel";
 import { mockProperties, buildDiscoverySections, pickInterstitials } from "@/lib/mock-data";
@@ -25,7 +26,16 @@ import {
   type AdvancedFilters,
 } from "@/lib/discovery-filters";
 import { formatPrice, cn } from "@/lib/utils";
-import type { AvailabilitySlot, OperationType, PropertyType } from "@/types";
+import { useAuth } from "@/lib/auth-context";
+import {
+  applyInterpretation,
+  interpretSearch,
+  isChipActive,
+  removeChip,
+  type DiscoveryQueryState,
+  type SearchInterpretation,
+} from "@/lib/ai-search";
+import type { AvailabilitySlot, OperationType, Property, PropertyType } from "@/types";
 
 /**
  * Discovery — pantalla principal del comprador. Reconstruida a partir del
@@ -59,6 +69,7 @@ const QUICK_TYPE_CHIPS: { id: PropertyType; label: string }[] = [
 ];
 
 const SECTIONS_PER_PAGE = 3;
+const NO_REQUESTS = new Map<string, AvailabilitySlot>();
 
 export function DiscoveryClient() {
   const searchParams = useSearchParams();
@@ -73,6 +84,22 @@ export function DiscoveryClient() {
   const [visibleSectionCount, setVisibleSectionCount] = useState(SECTIONS_PER_PAGE);
   const [advFilters, setAdvFilters] = useState<AdvancedFilters>(EMPTY_ADVANCED_FILTERS);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  // Solicitudes de visita enviadas en esta sesión, por propiedad — compartidas
+  // entre las tarjetas de la grilla y el Feed inmersivo (sin backend todavía).
+  const [requestedVisits, setRequestedVisits] = useState<Map<string, AvailabilitySlot>>(
+    () => new Map()
+  );
+  // Feed inmersivo (spec §3.6): overlay sobre Discovery, que queda montado
+  // debajo — "Volver a resultados" conserva scroll y filtros.
+  const [feedStart, setFeedStart] = useState<Property | null>(null);
+  // Las solicitudes son del comprador logueado: sin sesión (o tras cerrar
+  // sesión) no se muestran — agendar pide iniciar sesión (`useLoginGate`).
+  const { role } = useAuth();
+  const visibleRequests = role === "comprador" ? requestedVisits : NO_REQUESTS;
+  // Búsqueda IA (decisión abierta #8): última interpretación del texto
+  // libre. Sus filtros viven en el estado normal (advFilters/operation/
+  // appliedSearch) — esto sólo guarda la query y los chips para la franja.
+  const [aiSearch, setAiSearch] = useState<SearchInterpretation | null>(null);
 
   function toggleChip(id: QuickChipId) {
     setActiveChips((prev) => {
@@ -99,6 +126,7 @@ export function DiscoveryClient() {
     // TODO: POST /api/visits — crea VisitRequest en estado "pendiente",
     // dispara WhatsApp al agente y arranca el timer de 2hs. Ver spec §5.1.
     console.log("Visit requested", propertyId, slot);
+    setRequestedVisits((prev) => new Map(prev).set(propertyId, slot));
   }, []);
 
   const cancelVisit = useCallback((propertyId: string) => {
@@ -107,7 +135,14 @@ export function DiscoveryClient() {
     // "Cancelar" en el estado Sent de `PropertyCard` anula la solicitud
     // de verdad, no es solo cerrar el panel — ver comentario ahí.
     console.log("Visit cancelled", propertyId);
+    setRequestedVisits((prev) => {
+      const next = new Map(prev);
+      next.delete(propertyId);
+      return next;
+    });
   }, []);
+
+  const closeFeed = useCallback(() => setFeedStart(null), []);
 
   // --- Filtro por chips (operación + tipo + apto crédito) ------------------
   const activeTypeChips = useMemo(
@@ -152,15 +187,71 @@ export function DiscoveryClient() {
   const sections = useMemo(() => buildDiscoverySections(advancedFiltered), [advancedFiltered]);
   const interstitials = useMemo(() => pickInterstitials(advancedFiltered), [advancedFiltered]);
 
+  // --- Búsqueda IA ------------------------------------------------------------
+  const queryState: DiscoveryQueryState = {
+    filters: advFilters,
+    operation,
+    search: appliedSearch,
+  };
+
+  function setQueryState(next: DiscoveryQueryState) {
+    setAdvFilters(next.filters);
+    setOperation(next.operation);
+    setAppliedSearch(next.search);
+  }
+
+  /** Quita del estado lo que había agregado la interpretación anterior. */
+  function withoutPreviousAi(state: DiscoveryQueryState) {
+    if (!aiSearch) return state;
+    return aiSearch.chips
+      .filter((c) => isChipActive(state, c, aiSearch))
+      .reduce((s, c) => removeChip(s, c.key), state);
+  }
+
+  // Header (Enter / ✦) y textarea "Búsqueda IA" del panel usan esto.
+  function runSearch(text: string) {
+    setVisibleSectionCount(SECTIONS_PER_PAGE);
+    const base = withoutPreviousAi(queryState);
+    const query = text.trim();
+    const interp = query ? interpretSearch(query) : null;
+    if (!interp || interp.chips.length === 0) {
+      // Nada estructurado reconocido: búsqueda de texto como antes (puede
+      // terminar en el estado vacío "zona sin cobertura").
+      setQueryState({ ...base, search: query });
+      setAiSearch(null);
+      return;
+    }
+    setQueryState(applyInterpretation(base, interp));
+    setAiSearch(interp);
+  }
+
+  function removeAiChip(key: string) {
+    setQueryState(removeChip(queryState, key));
+  }
+
+  function clearAiSearch() {
+    setQueryState(withoutPreviousAi(queryState));
+    setAiSearch(null);
+    setSearchInput("");
+  }
+
+  // Chips todavía vigentes (se pueden haber quitado a mano desde el panel).
+  const activeAiChips = aiSearch
+    ? aiSearch.chips.filter((c) => isChipActive(queryState, c, aiSearch))
+    : [];
+  const showAiStrip = !!aiSearch && activeAiChips.length > 0;
+
   const activeFilterPills = [
-    ...(operation
+    // Con la franja de búsqueda IA visible, la operación y el resumen de
+    // filtros avanzados ya están representados por sus chips.
+    ...(operation && !showAiStrip
       ? [{ id: "operation", label: operation === "venta" ? "En venta" : "En alquiler" }]
       : []),
     ...QUICK_TYPE_CHIPS.filter((c) => activeChips.has(c.id)).map((c) => ({
       id: c.id,
       label: c.label,
     })),
-    ...(activeAdvancedCount > 0
+    ...(activeAdvancedCount > 0 && !showAiStrip
       ? [
           {
             id: "advanced",
@@ -169,9 +260,16 @@ export function DiscoveryClient() {
         ]
       : []),
   ];
+  // El estado vacío "filtros restrictivos" necesita poder quitar cualquier
+  // cosa, incluidos los chips de la búsqueda IA.
+  const emptyStatePills = [
+    ...activeAiChips.map((c) => ({ id: `ai:${c.key}`, label: c.label })),
+    ...activeFilterPills,
+  ];
 
   function removeFilter(id: string) {
-    if (id === "operation") setOperation(null);
+    if (id.startsWith("ai:")) removeAiChip(id.slice(3));
+    else if (id === "operation") setOperation(null);
     else if (id === "advanced") setAdvFilters(EMPTY_ADVANCED_FILTERS);
     else
       setActiveChips((prev) => {
@@ -185,6 +283,11 @@ export function DiscoveryClient() {
     setOperation(null);
     setActiveChips(new Set());
     setAdvFilters(EMPTY_ADVANCED_FILTERS);
+    if (aiSearch) {
+      setAiSearch(null);
+      setAppliedSearch("");
+      setSearchInput("");
+    }
   }
 
   // "Restrictivos" cubre tanto los chips rápidos como el panel avanzado —
@@ -209,15 +312,20 @@ export function DiscoveryClient() {
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  setAppliedSearch(searchInput);
-                  setVisibleSectionCount(SECTIONS_PER_PAGE);
-                }
+                if (e.key === "Enter") runSearch(searchInput);
               }}
               placeholder="Buscar en tu zona, ciudad o código postal"
+              aria-label="Buscar propiedades"
               className="w-full bg-transparent text-sm outline-none placeholder:text-buyer-text-faint"
             />
-            <Sparkles size={16} className="shrink-0 text-accent" />
+            <button
+              onClick={() => runSearch(searchInput)}
+              aria-label="Buscar con IA"
+              title="Describí lo que buscás: zona, tipo, presupuesto, mascotas…"
+              className="shrink-0 text-accent"
+            >
+              <Sparkles size={16} />
+            </button>
           </div>
         }
       />
@@ -292,13 +400,59 @@ export function DiscoveryClient() {
                   : "text-buyer-text-muted"
               )}
             >
-              <Map size={14} /> Mapa
+              <MapIcon size={14} /> Mapa
             </button>
           </div>
         </div>
       </div>
 
       <main className="mx-auto max-w-7xl px-8 py-8">
+        {showAiStrip && aiSearch && (
+          <div className="mb-6 rounded-card border border-accent/40 bg-accent-tint p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-buyer-text-muted">
+                  <Sparkles size={12} className="text-accent" /> Resultados para tu búsqueda
+                </p>
+                <p className="mt-1 truncate font-display text-lg font-semibold text-buyer-text">
+                  &ldquo;{aiSearch.query}&rdquo;
+                </p>
+              </div>
+              <button
+                onClick={clearAiSearch}
+                className="shrink-0 text-xs font-semibold text-buyer-text-muted underline"
+              >
+                Limpiar búsqueda
+              </button>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {activeAiChips.map((chip) => (
+                <button
+                  key={chip.key}
+                  onClick={() => removeAiChip(chip.key)}
+                  aria-label={`Quitar filtro ${chip.label}`}
+                  className="flex items-center gap-1.5 rounded-pill border border-buyer-border bg-white px-3 py-1.5 text-xs font-medium text-buyer-text hover:border-buyer-text"
+                >
+                  {chip.key === "location" && <MapPin size={11} className="text-accent" />}
+                  {chip.label} <X size={11} className="text-buyer-text-faint" />
+                </button>
+              ))}
+            </div>
+            {aiSearch.unmatched.length > 0 && (
+              <p className="mt-2.5 text-xs text-buyer-text-faint">
+                Sin filtro para: {aiSearch.unmatched.join(", ")} — probá con los{" "}
+                <button
+                  onClick={() => setShowAdvancedFilters(true)}
+                  className="font-semibold text-buyer-text-muted underline"
+                >
+                  Filtros avanzados
+                </button>
+                .
+              </p>
+            )}
+          </div>
+        )}
+
         {activeFilterPills.length > 0 && !showFiltrosRestrictivos && (
           <div className="mb-6 flex flex-wrap items-center gap-2">
             {activeFilterPills.map((f) => (
@@ -316,7 +470,7 @@ export function DiscoveryClient() {
         {showFiltrosRestrictivos ? (
           <DiscoveryEmptyState
             variant="filtros-restrictivos"
-            activeFilters={activeFilterPills}
+            activeFilters={emptyStatePills}
             onRemoveFilter={removeFilter}
             onClearAll={clearAllFilters}
           />
@@ -350,9 +504,11 @@ export function DiscoveryClient() {
                         key={`${section.id}-${property.id}`}
                         property={property}
                         isFavorite={favorites.has(property.id)}
+                        requestedSlot={visibleRequests.get(property.id) ?? null}
                         onToggleFavorite={toggleFavorite}
                         onRequestVisit={requestVisit}
                         onCancelVisit={cancelVisit}
+                        onOpenImmersive={setFeedStart}
                       />
                     ))}
                   </div>
@@ -395,11 +551,23 @@ export function DiscoveryClient() {
         searchDraft={searchInput}
         onSearchDraftChange={setSearchInput}
         onApplySearch={() => {
-          setAppliedSearch(searchInput);
-          setVisibleSectionCount(SECTIONS_PER_PAGE);
+          runSearch(searchInput);
           setShowAdvancedFilters(false);
         }}
       />
+
+      {feedStart && (
+        <ImmersiveFeed
+          startProperty={feedStart}
+          pool={advancedFiltered}
+          favorites={favorites}
+          onToggleFavorite={toggleFavorite}
+          requestedVisits={visibleRequests}
+          onRequestVisit={requestVisit}
+          onCancelVisit={cancelVisit}
+          onClose={closeFeed}
+        />
+      )}
     </div>
   );
 }
@@ -434,7 +602,7 @@ function MapaPlaceholder({ count }: { count: number }) {
         ))}
       </div>
       <div className="flex min-h-[420px] flex-col items-center justify-center rounded-control bg-buyer-bg text-center">
-        <Map size={28} className="mb-3 text-buyer-text-faint" />
+        <MapIcon size={28} className="mb-3 text-buyer-text-faint" />
         <p className="text-sm font-semibold text-buyer-text">Mapa interactivo — próximamente</p>
         <p className="mt-1 max-w-xs text-xs text-buyer-text-muted">
           Clustering de pines y preview flotante al click (spec §3.3). Falta

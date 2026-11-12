@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth-context";
+import { LoginGateProvider } from "@/lib/login-gate";
 import { PropertyMediaProvider } from "@/lib/property-media";
 
 // Nota: Inter y Fraunces (spec §1.4) se cargan vía next/font/google en un
@@ -18,7 +19,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html lang="es" className="h-full antialiased">
       <body className="min-h-full flex flex-col">
         <AuthProvider>
-          <PropertyMediaProvider>{children}</PropertyMediaProvider>
+          <LoginGateProvider>
+            <PropertyMediaProvider>{children}</PropertyMediaProvider>
+          </LoginGateProvider>
         </AuthProvider>
       </body>
     </html>

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Briefcase } from "lucide-react";
 import { Logo } from "@/components/layout/Logo";
 
 /**
@@ -113,6 +113,20 @@ export default function LandingPage() {
         >
           o explorá todas las propiedades <ArrowRight size={14} />
         </Link>
+
+        {/* Acceso para agentes (pedido del usuario) — debajo de las acciones
+            del comprador y con menos peso visual que Comprar/Alquilar. Lleva
+            al login de agente, que ya tiene "Registrate como agente". */}
+        <div className="mt-10 flex flex-col items-center gap-3">
+          <span className="h-px w-16 bg-white/25" />
+          <p className="text-xs text-white/60">¿Sos agente inmobiliario?</p>
+          <Link
+            href="/agente/login"
+            className="flex items-center gap-2 rounded-pill border border-white/30 bg-black/40 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:border-accent hover:text-accent"
+          >
+            <Briefcase size={15} /> Ingresar como agente
+          </Link>
+        </div>
       </main>
 
       <p className="absolute inset-x-0 bottom-6 z-10 text-center text-xs text-white/50">

@@ -8,6 +8,7 @@ import {
   EMPTY_ADVANCED_FILTERS,
   type AdvancedFilters,
 } from "@/lib/discovery-filters";
+import { SUGGESTED_AI_TAGS } from "@/lib/ai-search";
 import type { PropertyAmenities, PropertyCharacteristics, PropertyType } from "@/types";
 
 /**
@@ -21,8 +22,10 @@ import type { PropertyAmenities, PropertyCharacteristics, PropertyType } from "@
  * TRACKING.md para el detalle de qué campos de datos se agregaron para
  * soportarlo (tipos de vivienda más finos, amenities).
  *
- * El textarea "Búsqueda IA" del final NO arma estos filtros
- * automáticamente — ver comentario en `discovery-filters.ts`.
+ * El textarea "Búsqueda IA" del final pasa por el mismo intérprete que el
+ * buscador del Header (`lib/ai-search.ts`): lo que reconoce se aplica sobre
+ * ESTOS filtros (quedan tildados acá) y aparece como chips en Discovery.
+ * Abajo tiene tags sugeridos (spec §3.8) que se suman al texto.
  *
  * Se abre con un fondo con blur (backdrop) + el panel deslizándose desde
  * el margen izquierdo hacia adentro, pedido explícitamente por el
@@ -396,6 +399,19 @@ export function AdvancedFiltersPanel({
               rows={3}
               className="w-full resize-none rounded-xl bg-buyer-input-bg p-3 text-sm text-buyer-text outline-none placeholder:text-buyer-text-faint focus:ring-2 focus:ring-accent"
             />
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {SUGGESTED_AI_TAGS.map((tag) => (
+                <button
+                  key={tag}
+                  onClick={() =>
+                    onSearchDraftChange(searchDraft.trim() ? `${searchDraft.trim()} ${tag.toLowerCase()}` : tag)
+                  }
+                  className="rounded-pill border border-buyer-border bg-white px-2.5 py-1 text-[11px] text-buyer-text-muted hover:border-buyer-text hover:text-buyer-text"
+                >
+                  + {tag}
+                </button>
+              ))}
+            </div>
             <button
               onClick={onApplySearch}
               className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-accent"

@@ -18,8 +18,9 @@ import { AccountSettingsPanel } from "@/components/account/AccountSettingsPanel"
  * - No hay campanita de notificaciones en el header en el diseño real —
  *   el Centro de Notificaciones (spec §3.14) va a necesitar otra entrada
  *   cuando se construya esa pantalla.
- * - El comprador logueado SÍ sigue viendo "Anunciar propiedad" (como link
- *   de texto, no botón) — la spec decía que no debía verse.
+ * - El comprador logueado NO ve "Anunciar propiedad" (pedido del usuario,
+ *   coincide con la spec §2). El Figma lo mostraba como link de texto y se
+ *   había seguido el Figma; se revirtió. El invitado lo sigue viendo.
  * - El ícono de "Mis Visitas" es un combo calendario+reloj (cuenta
  *   regresiva de 2hs, spec §5.1), aproximado acá con `CalendarClock`.
  *   Abre el dropdown `MisVisitasPanel` (antes era decorativo) — frames
@@ -102,12 +103,6 @@ export function Header({ variant = "solid", className, centerSlot }: HeaderProps
 
           {role === "comprador" && (
             <>
-              <Link
-                href="/agente/login"
-                className="text-sm font-semibold text-buyer-text"
-              >
-                Anunciar propiedad
-              </Link>
               <div className="relative">
                 <button
                   onClick={() => {

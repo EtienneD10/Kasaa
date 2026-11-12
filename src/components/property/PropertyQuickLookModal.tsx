@@ -54,6 +54,10 @@ interface PropertyQuickLookModalProps {
   isFavorite: boolean;
   onToggleFavorite?: (propertyId: string) => void;
   onRequestVisitClick: () => void;
+  /** "Ver visita inmersiva completa" → Feed inmersivo (spec §3.5/§3.6),
+   * arrancando por la propiedad que se está viendo en el modal (puede ser
+   * una relacionada). Sin handler, el botón queda deshabilitado. */
+  onOpenImmersive?: (property: Property) => void;
 }
 
 const ORIENTACION_LABEL: Record<string, string> = {
@@ -76,6 +80,7 @@ export function PropertyQuickLookModal({
   isFavorite,
   onToggleFavorite,
   onRequestVisitClick,
+  onOpenImmersive,
 }: PropertyQuickLookModalProps) {
   // `PropertyQuickLookModal` se monta/desmonta con `showQuickLook` en
   // `PropertyCard` (no queda vivo entre distintas `initialProperty`), así
@@ -99,10 +104,13 @@ export function PropertyQuickLookModal({
       if (e.key === "Escape") onClose();
     }
     document.addEventListener("keydown", onKeyDown);
+    // Restaura el valor previo (no ""): abierto encima del Feed inmersivo,
+    // vaciarlo destrababa el scroll de Discovery mientras el feed seguía abierto.
+    const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.removeEventListener("keydown", onKeyDown);
-      document.body.style.overflow = "";
+      document.body.style.overflow = prevOverflow;
     };
   }, [onClose]);
 
@@ -272,8 +280,9 @@ export function PropertyQuickLookModal({
 
           <div className="mt-4 flex gap-2">
             <button
-              title="Próximamente: feed inmersivo"
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-buyer-border bg-white py-3 text-xs font-bold text-buyer-text"
+              onClick={() => onOpenImmersive?.(property)}
+              disabled={!onOpenImmersive}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-buyer-border bg-white py-3 text-xs font-bold text-buyer-text hover:border-buyer-text disabled:cursor-not-allowed disabled:text-buyer-text-faint"
             >
               <Play size={13} /> Ver visita inmersiva completa
             </button>

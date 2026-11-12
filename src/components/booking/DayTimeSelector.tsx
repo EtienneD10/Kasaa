@@ -70,7 +70,10 @@ export function DayTimeSelector({
               key={date}
               onClick={() => onSelectDate(date)}
               className={cn(
-                "flex min-w-[64px] flex-1 flex-col items-center gap-0.5 rounded-xl border px-2 py-2 transition-colors",
+                // min-w-0 (antes 64px): en el ancho de la tarjeta de la grilla
+                // los 4 chips no entraban y la fila quedaba scrolleada,
+                // cortando el primero ("OM 25 / OY").
+                "flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-xl border px-2 py-2 transition-colors",
                 selected
                   ? "border-2 border-accent bg-accent-tint"
                   : "border-buyer-border bg-white hover:border-buyer-text"

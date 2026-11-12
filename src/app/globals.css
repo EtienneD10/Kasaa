@@ -64,6 +64,16 @@
   --radius-pill: 9999px;
 }
 
+/* Tailwind v4 dejó los botones con `cursor: default` (preflight); el pedido
+   es que al pasar el mouse sobre cualquier botón aparezca la "mano". En
+   `@layer base` para que utilidades como `cursor-not-allowed` sigan ganando. */
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+}
+
 body {
   background: var(--color-buyer-bg);
   color: var(--color-buyer-text);

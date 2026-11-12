@@ -6,12 +6,8 @@ import type { Property, PropertyAmenities, PropertyCharacteristics, PropertyType
  * `DiscoveryClient`/`AdvancedFiltersPanel` para que la función de filtrado
  * sea una función pura testeable, y para no inflar más esos componentes.
  *
- * "Búsqueda IA" (el textarea al final del panel) NO arma estos campos
- * automáticamente todavía — interpretar texto libre en filtros
- * estructurados es la misma feature pendiente que los chips descartables
- * de la franja "Resultados para tu búsqueda" en Discovery (ver
- * TRACKING.md). Acá el textarea por ahora solo alimenta el mismo buscador
- * de texto libre que ya existe.
+ * "Búsqueda IA" (buscador del Header y textarea al final del panel) arma
+ * estos mismos campos a partir de texto libre — ver `lib/ai-search.ts`.
  */
 export interface AdvancedFilters {
   types: PropertyType[];
